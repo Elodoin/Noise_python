@@ -122,16 +122,18 @@ for ii in range(rank,splits+size-extra,size):
 
             #-----------get the parameter of Nfft-----------
             t0=time.time()
-            Nfft = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[0,:]))
-            Nseg = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[:,0]))
+            Nfft = fft_ds_s.auxiliary_data[data_type][paths].parameters['nfft']
+            Nseg = fft_ds_s.auxiliary_data[data_type][paths].parameters['nseg']
+            
             dataS_t = []
-            fft1 = np.zeros(shape=(Nseg,Nfft//2),dtype=np.complex)
-                
-            fft1= np.add(np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]) \
-                    , 1j* np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,Nfft//2:Nfft-1]))
+            fft1 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)
+            fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]
+            
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
             date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
             dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+            del date
+
             t1=time.time()
             print('reading source takes '+str(t1-t0)+' s')
 
@@ -147,16 +149,14 @@ for ii in range(rank,splits+size-extra,size):
                     pathr = tpath
                     print(str(pathr))
                     dataR_t = []
-                    fft2 = np.zeros(shape=(Nseg,Nfft//2),dtype=np.complex)
-                                
-                    fft2=np.add(np.array(fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]) \
-                            , 1j* np.array(fft_ds_r.auxiliary_data[data_type][pathr].data[:,Nfft//2:Nfft-1]))
+                    fft2 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)           
+                    fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]
+
                     sampling_rate = fft_ds_r.auxiliary_data[data_type][pathr].parameters['sampling_rate']
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
-                    #date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
-                    #dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-                    #del date
-
+                    date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
+                    dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+                    del date
 
                     #---------- check the existence of earthquakes ----------
                     rec_ind = np.where(receiver_std < 10)[0]
