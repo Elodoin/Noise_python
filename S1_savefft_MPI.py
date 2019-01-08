@@ -28,16 +28,16 @@ by C.Jiang, T.Clements, M.Denolle
 
 
 #------form the absolute paths-------
-locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
-FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
-#FFTDIR = '/n/regal/denolle_lab/cjiang/FFT'
-event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
-resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
+#locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
+#FFTDIR    = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
+#FFTDIR    = '/n/regal/denolle_lab/cjiang/FFT'
+#event     = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
+#resp_dir  = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-#locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-#FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT1'
-#event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_????_???'
-#resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+FFTDIR    = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+event     = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_????_???'
+resp_dir  = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
 prepro=False    # do you need to reprocess the data?
