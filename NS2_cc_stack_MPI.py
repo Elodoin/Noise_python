@@ -130,8 +130,8 @@ for ii in range(rank,splits+size-extra,size):
             fft1= np.add(np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]) \
                     , 1j* np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,Nfft//2:Nfft-1]))
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
-            #date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
-            #dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+            date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
+            dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
             t1=time.time()
             print('reading source takes '+str(t1-t0)+' s')
 
