@@ -81,11 +81,11 @@ for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
         source,receiver = pairs[ii][0],pairs[ii][1]
-        print('source is ' + source.split('/')[-1] + ' receiver is ' + receiver.split('/')[-1] + ' rank is ' + str(rank))
+        print('source '+source.split('/')[-1]+' receiver '+receiver.split('/')[-1]+' rank '+str(rank))
 
-        fft_h5 = source
+        fft_h5   = source
         fft_ds_s = pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r')
-        fft_h5 = receiver
+        fft_h5   = receiver
         fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r')
         
         #-------get source information------
@@ -94,8 +94,8 @@ for ii in range(rank,splits+size-extra,size):
         netS = net_sta_s.split('.')[0]
 
         tindx = sta.index(staS)
-        slat = locs.iloc[tindx]['latitude']
-        slon = locs.iloc[tindx]['longitude']
+        slat  = locs.iloc[tindx]['latitude']
+        slon  = locs.iloc[tindx]['longitude']
         path_list_s = fft_ds_s.auxiliary_data[data_type].list()
 
         #------get receiver information--------
@@ -104,33 +104,36 @@ for ii in range(rank,splits+size-extra,size):
         netR = net_sta_r.split('.')[0]
 
         tindx = sta.index(staR)
-        rlat = locs.iloc[tindx]['latitude']
-        rlon = locs.iloc[tindx]['longitude']
+        rlat  = locs.iloc[tindx]['latitude']
+        rlon  = locs.iloc[tindx]['longitude']
         path_list_r = fft_ds_r.auxiliary_data[data_type].list()
 
         #---------initialize index and stacking arrays for saving sac files---------
-        indx = np.zeros(shape=(len(tcomp),len(tcomp)),dtype=np.int16)       # this array contains the comp information for each station pair
+        indx = np.zeros(shape=(len(tcomp),len(tcomp)),dtype=np.int16)       # indx contains the comp information for each station pair
         tlen = int((2*maxlag)/dt+1)
         ncorr = np.zeros(shape=(indx.size,tlen),dtype=np.float32)
         #pcorr = np.zeros(shape=(indx.size,tlen),dtype=np.float32)
 
         #---------loop through each component of the source------
         for jj in range(len(path_list_s)):
-            #print('begin source ' + path_list_s[jj])
 
             paths = path_list_s[jj]
             compS = fft_ds_s.auxiliary_data[data_type][paths].parameters['component']
 
             #-----------get the parameter of Nfft-----------
+            t0=time.time()
             Nfft = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[0,:]))
+            Nseg = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[:,0]))
             dataS_t = []
+            fft1 = np.zeros(shape=(Nseg,Nfft//2),dtype=np.complex)
                 
             fft1= np.add(np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]) \
                     , 1j* np.array(fft_ds_s.auxiliary_data[data_type][paths].data[:,Nfft//2:Nfft-1]))
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
-            date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
-            dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-            del date
+            #date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
+            #dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+            t1=time.time()
+            print('reading source takes '+str(t1-t0)+' s')
 
             #-------day information------
             tday  = paths[-10:]
@@ -144,14 +147,15 @@ for ii in range(rank,splits+size-extra,size):
                     pathr = tpath
                     print(str(pathr))
                     dataR_t = []
+                    fft2 = np.zeros(shape=(Nseg,Nfft//2),dtype=np.complex)
                                 
                     fft2=np.add(np.array(fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]) \
                             , 1j* np.array(fft_ds_r.auxiliary_data[data_type][pathr].data[:,Nfft//2:Nfft-1]))
                     sampling_rate = fft_ds_r.auxiliary_data[data_type][pathr].parameters['sampling_rate']
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
-                    date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
-                    dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-                    del date
+                    #date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
+                    #dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+                    #del date
 
 
                     #---------- check the existence of earthquakes ----------
@@ -167,15 +171,18 @@ for ii in range(rank,splits+size-extra,size):
                     if (len(indx1)==0) | (len(indx2)==0):
                         continue
 
+                    t0=time.time()
                     #-----------do daily cross-correlations now-----------
                     corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1], \
                             np.round(maxlag),dt,Nfft,method)
+                    t1=time.time()
+                    print('cross correlations take '+str(t1-t0)+' s')
 
-                    #------find the index to store data------
+                    #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
                     nindx=tcomp.index(compS)*len(tcomp)+tcomp.index(compR)
 
-                    #-------do stackings here--------
+                    #--------linear stackings---------
                     if corr.ndim==2:
                         y = np.mean(corr,axis=0)
                         #y2 = noise_module.butter_pass(y,freqmin,freqmax,dt,2)
@@ -186,9 +193,9 @@ for ii in range(rank,splits+size-extra,size):
                     ncorr[nindx][:] = ncorr[nindx][:] + y
 
                     #-------pws stacking--------
-                    y2 = noise_module.pws(np.array(corr),2,1/dt,5.)
+                    #y2 = noise_module.pws(np.array(corr),2,1/dt,5.)
                     #y4 = noise_module.butter_pass(y2,freqmin,freqmax,dt,2)
-                    pcorr[nindx][:] = pcorr[nindx][:] + y2
+                    #pcorr[nindx][:] = pcorr[nindx][:] + y2
  
 
         #-------ready to write into files---------
