@@ -26,6 +26,7 @@ computes the cross-correlations between each station-pair at an overlapping time
 this version is implemented with MPI (Nov.09.2018)
 '''
 
+t0=time.time()
 
 #------some useful absolute paths-------
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT'
@@ -33,8 +34,8 @@ this version is implemented with MPI (Nov.09.2018)
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT1'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF3'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
@@ -130,9 +131,9 @@ for ii in range(rank,splits+size-extra,size):
             fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]
             
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
-            date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
-            dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-            del date
+            #date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
+            #dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+            #del date
 
             t1=time.time()
             print('reading source takes '+str(t1-t0)+' s')
@@ -152,11 +153,11 @@ for ii in range(rank,splits+size-extra,size):
                     fft2 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)           
                     fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]
 
-                    sampling_rate = fft_ds_r.auxiliary_data[data_type][pathr].parameters['sampling_rate']
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
-                    date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
-                    dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-                    del date
+                    
+                    #date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
+                    #dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
+                    #del date
 
                     #---------- check the existence of earthquakes ----------
                     rec_ind = np.where(receiver_std < 10)[0]
@@ -227,6 +228,9 @@ for ii in range(rank,splits+size-extra,size):
 
         #del pcorr
         del fft_ds_s, fft_ds_r, path_list_r, path_list_s, fft1, fft2, dataS_t, dataR_t, source_std, receiver_std, ncorr
+
+t1=time.time()
+print('step2 takes '+str(t1-t0)+' s')
 
 comm.barrier()
 if rank == 0:

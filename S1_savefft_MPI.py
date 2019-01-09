@@ -26,7 +26,7 @@ this version is implemented with MPI (Nov.09.2018)
 by C.Jiang, T.Clements, M.Denolle
 '''
 
-
+t0=time.time()
 #------form the absolute paths-------
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
@@ -34,9 +34,9 @@ by C.Jiang, T.Clements, M.Denolle
 #event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT1'
-event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_????_???'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_001'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
@@ -252,7 +252,10 @@ for ista in range (rank,splits+size-extra,size):
                 del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
 
             del tfiles
-    
+
+t1=time.time()
+print('step1 takes '+str(t1-t0)+' s')
+
 comm.barrier()
 
 if rank == 0:
