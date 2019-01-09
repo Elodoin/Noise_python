@@ -26,6 +26,7 @@ computes the cross-correlations between each station-pair at an overlapping time
 this version is implemented with MPI (Nov.09.2018)
 '''
 
+t0=time.time()
 
 #------some useful absolute paths-------
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT'
@@ -34,8 +35,8 @@ this version is implemented with MPI (Nov.09.2018)
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT1'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF3'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF1'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
 
@@ -121,7 +122,7 @@ for ii in range(rank,splits+size-extra,size):
             compS = fft_ds_s.auxiliary_data[data_type][paths].parameters['component']
 
             #-----------get the parameter of Nfft-----------
-            t0=time.time()
+            #t0=time.time()
             Nfft = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[0,:]))
             Nseg = len(np.array(fft_ds_s.auxiliary_data[data_type][path_list_s[0]].data[:,0]))
             dataS_t = []
@@ -132,8 +133,8 @@ for ii in range(rank,splits+size-extra,size):
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
             date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
             dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-            t1=time.time()
-            print('reading source takes '+str(t1-t0)+' s')
+            #t1=time.time()
+            #print('reading source takes '+str(t1-t0)+' s')
 
             #-------day information------
             tday  = paths[-10:]
@@ -171,12 +172,12 @@ for ii in range(rank,splits+size-extra,size):
                     if (len(indx1)==0) | (len(indx2)==0):
                         continue
 
-                    t0=time.time()
+                    #t0=time.time()
                     #-----------do daily cross-correlations now-----------
                     corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1], \
                             np.round(maxlag),dt,Nfft,method)
-                    t1=time.time()
-                    print('cross correlations take '+str(t1-t0)+' s')
+                    #t1=time.time()
+                    #print('cross correlations take '+str(t1-t0)+' s')
 
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
@@ -227,6 +228,9 @@ for ii in range(rank,splits+size-extra,size):
 
         #del pcorr
         del fft_ds_s, fft_ds_r, path_list_r, path_list_s, fft1, fft2, dataS_t, dataR_t, source_std, receiver_std, ncorr
+
+t1=time.time()
+print('step2 takes '+str(t1-t0)+' s')
 
 comm.barrier()
 if rank == 0:

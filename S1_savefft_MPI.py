@@ -26,6 +26,7 @@ this version is implemented with MPI (Nov.09.2018)
 by C.Jiang, T.Clements, M.Denolle
 '''
 
+t0=time.time()
 
 #------form the absolute paths-------
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
@@ -34,9 +35,9 @@ by C.Jiang, T.Clements, M.Denolle
 #event     = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir  = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-FFTDIR    = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
-event     = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_????_???'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
+FFTDIR    = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT1'
+event     = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_001'
 resp_dir  = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
@@ -116,7 +117,7 @@ for ista in range (rank,splits+size-extra,size):
                 #------------Pre-Processing-----------
                 source = obspy.Stream()
                 source = source1.merge(method=1,fill_value=0.)[0]
-                t0=time.time()
+                #t0=time.time()
                 
                 if prepro:
                     source = noise_module.process_raw(source1, downsamp_freq)
@@ -186,7 +187,7 @@ for ista in range (rank,splits+size-extra,size):
                     win.taper(max_percentage=0.05,max_length=20)
                     source_slice += win
                 del source, source1
-                t1=time.time()
+                #t1=time.time()
                 #print("slicing source in " + str(t1-t0) + "s")
 
                 if len(source_slice) == 0:
@@ -197,7 +198,7 @@ for ista in range (rank,splits+size-extra,size):
                 source_params= np.vstack([trace_madS,trace_stdS,nonzeroS]).T
                 del trace_madS, trace_stdS, nonzeroS
 
-                t0=time.time()
+                #t0=time.time()
                 #---------save the preprocessed source into memerory-------
                 NtS = np.max(nptsS)
                 dataS_t= np.zeros(shape=(N,2))
@@ -209,7 +210,7 @@ for ista in range (rank,splits+size-extra,size):
                     if ii==0:
                         dataS_stats=trace.stats
 
-                t1=time.time()
+                #t1=time.time()
                 #print("saving source in " + str(t1-t0) + "s")
 
                 #------check the dimension of the dataS-------
@@ -219,7 +220,7 @@ for ista in range (rank,splits+size-extra,size):
                     axis = 1
 
 
-                t0=time.time()
+                #t0=time.time()
                 #-----------FFT NOW--------------
                 Nt = len(source_slice)
                 Nfft = int(next_fast_len(int(dataS.shape[axis])))
@@ -240,13 +241,13 @@ for ista in range (rank,splits+size-extra,size):
                     source_white = scipy.fftpack.fft(white, Nfft, axis=axis)
                     del white
 
-                t1=time.time()
+                #t1=time.time()
                 #print("FFT in " + str(t1-t0) + "s")
 
-                t0=time.time()
+                #t0=time.time()
                 #------------- save FFTs into HDF5 file -------------------
                 crap=np.zeros(shape=(len(source_white[:,1]),Nfft))
-                print('splits is ' + str(splits) + ' rank is ' + str(rank) + ' index is ' + str(ista))
+                #print('splits is ' + str(splits) + ' rank is ' + str(rank) + ' index is ' + str(ista))
                 fft_h5 = os.path.join(FFTDIR,locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"] + '.h5')
                 if not os.path.isfile(fft_h5):
                     with pyasdf.ASDFDataSet(fft_h5,mpi=False) as ds:
@@ -257,7 +258,7 @@ for ista in range (rank,splits+size-extra,size):
                 with pyasdf.ASDFDataSet(fft_h5,mpi=False) as fft_ds:
                     #print(dataS_stats)
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
-                        locs.iloc[ista],comp)
+                        locs.iloc[ista],comp,Nfft,Nt)
 
                     savedate = '_'.join((str(dataS_stats.starttime.year),str(dataS_stats.starttime.month), \
                         str(dataS_stats.starttime.day)))
@@ -270,10 +271,13 @@ for ista in range (rank,splits+size-extra,size):
                     crap[:,Nfft//2:Nfft-1]=np.squeeze(np.imag(source_white[:,:Nfft//2-1]))
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
                 del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
-                t1=time.time()
+                #t1=time.time()
                 #print("saving hdf5 in " + str(t1-t0) + "s")
             del tfiles
-    
+
+t1=time.time()
+print('step 1 takes '+str(t1-t0)+' s')
+
 comm.barrier()
 
 if rank == 0:
