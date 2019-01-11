@@ -3,7 +3,6 @@ import glob
 import itertools
 from datetime import datetime
 import copy
-import time
 
 import numpy as np
 import scipy
@@ -607,7 +606,7 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     else:
         corr = corr[ind]
     tcorr=tcorr[ind]
-    
+
     return corr,tcorr
 
 

@@ -168,12 +168,12 @@ for ii in range(rank,splits+size-extra,size):
                     if (len(indx1)==0) | (len(indx2)==0):
                         continue
 
-                    t0=time.time()
+                    #t0=time.time()
                     #-----------do daily cross-correlations now-----------
                     corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1], \
                             np.round(maxlag),dt,Nfft,method)
-                    t1=time.time()
-                    print('corr takes '+str(t1-t0)+' s')
+                    #t1=time.time()
+                    #print('corr takes '+str(t1-t0)+' s')
 
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
