@@ -3,6 +3,7 @@ import glob
 import itertools
 from datetime import datetime
 import copy
+from numba import jit
 
 import numpy as np
 import scipy
@@ -596,7 +597,6 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
         ind = np.where(np.abs(fft2)>0 )
 
     corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
-    #print(corr.shape)
     corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis))) 
  
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
