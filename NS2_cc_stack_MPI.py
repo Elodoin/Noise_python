@@ -35,7 +35,7 @@ t0=time.time()
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF2'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
@@ -122,7 +122,6 @@ for ii in range(rank,splits+size-extra,size):
             compS = fft_ds_s.auxiliary_data[data_type][paths].parameters['component']
 
             #-----------get the parameter of Nfft-----------
-            t0=time.time()
             Nfft = fft_ds_s.auxiliary_data[data_type][paths].parameters['nfft']
             Nseg = fft_ds_s.auxiliary_data[data_type][paths].parameters['nseg']
             
@@ -134,9 +133,6 @@ for ii in range(rank,splits+size-extra,size):
             #date =fft_ds_s.auxiliary_data[data_type][paths].parameters['starttime'] 
             #dataS_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
             #del date
-
-            t1=time.time()
-            print('reading source takes '+str(t1-t0)+' s')
 
             #-------day information------
             tday  = paths[-10:]
@@ -177,7 +173,7 @@ for ii in range(rank,splits+size-extra,size):
                     corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1], \
                             np.round(maxlag),dt,Nfft,method)
                     t1=time.time()
-                    print('cross correlations take '+str(t1-t0)+' s')
+                    print('corr takes '+str(t1-t0)+' s')
 
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
