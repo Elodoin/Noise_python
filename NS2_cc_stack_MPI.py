@@ -146,10 +146,6 @@ for ii in range(rank,splits+size-extra,size):
                     fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]
 
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
-                    
-                    #date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
-                    #dataR_t=np.array(pd.to_datetime([datetime.utcfromtimestamp(s) for s in date]))
-                    #del date
 
                     #---------- check the existence of earthquakes ----------
                     rec_ind = np.where(receiver_std < 10)[0]
@@ -200,7 +196,7 @@ for ii in range(rank,splits+size-extra,size):
                             print([netS+"."+staS+"."+netR+"."+staR+'.h5', 'Already exists',obspy.UTCDateTime()])
 
                         with pyasdf.ASDFDataSet(fft_h5,mpi=False) as ccf_ds:
-                            parameters = {'dt':dt, 'maxlag':maxlag, 'starttime':str(dataR_t[rec_ind]), 'method':str(method)}
+                            parameters = {'dt':dt, 'maxlag':maxlag, 'method':str(method)}
 
                             #------save the time domain cross-correlation functions-----
                             path = '_'.join(['ccfs',str(method),netS,staS,netR,staR,compS,compR,tday])

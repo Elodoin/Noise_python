@@ -27,6 +27,7 @@ by C.Jiang, T.Clements, M.Denolle
 '''
 
 t0=time.time()
+
 #------form the absolute paths-------
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
@@ -239,6 +240,7 @@ for ista in range (rank,splits+size-extra,size):
                 with pyasdf.ASDFDataSet(fft_h5,mpi=False) as fft_ds:
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
                         locs.iloc[ista],comp,Nfft,Nt)
+                        
                     savedate = '_'.join((str(dataS_stats.starttime.year),str(dataS_stats.starttime.month), \
                         str(dataS_stats.starttime.day)))
                     savedate = datetime.strptime(savedate,'%Y_%m_%d')
