@@ -582,19 +582,22 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
         nwin= int(fft1.shape[0])
 
     #maxlag = np.round(maxlag)
-    corr=np.zeros(shape=(nwin,Nfft),dtype=np.complex_)
+    corr=np.zeros(shape=(nwin,Nfft),dtype=np.complex64)
     corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
-   # print(fft1.shape)
+
     if method == 'deconv':
         ind = np.where(np.abs(fft1)>0 )
-        corr[ind] /= smooth(np.abs(fft1[ind]),half_win=10) ** 2
+        #corr[ind] /= smooth(np.abs(fft1[ind]),half_win=10) ** 2
+        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
     elif method == 'coherence':
         ind = np.where(np.abs(fft1)>0 )
-        corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
+        #corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
+        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
         ind = np.where(np.abs(fft2)>0 )
-        corr[ind]  /= smooth(np.abs(fft2[ind]),half_win=5)
+        #corr[ind]  /= smooth(np.abs(fft2[ind]),half_win=5)
+        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
     elif method == 'raw':
-        ind = np.where(np.abs(fft2)>0 )
+        ind = 1
 
     corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
     corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis))) 
