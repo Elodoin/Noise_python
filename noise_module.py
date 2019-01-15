@@ -3,7 +3,9 @@ import glob
 import itertools
 from datetime import datetime
 import copy
-from numba import jit
+import time
+import dsp_fortran
+import matplotlib.pyplot as plt
 
 import numpy as np
 import scipy
@@ -560,6 +562,55 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict            
 
+def fcorrelate(fft1, fft2, maxlag, dt, Nfft, method="cross-correlation"):
+    if fft1.ndim == 1:
+        axis = 0
+        nwin=1
+    elif fft1.ndim == 2:
+        axis = 1
+        nwin= int(fft1.shape[0])
+
+    t0=time.time()
+    corr=np.zeros(shape=(nwin,Nfft//2-1),dtype=np.complex64)
+    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
+    #corr=dsp_fortran.correlate_decon(fft1,fft2,nwin,Nfft//2-1)
+
+    if method == 'deconv':
+        ind = np.where(np.abs(fft1)>0 )
+        smt = np.zeros(shape=(len(ind[0]),),dtype=np.float32)
+        smt=dsp_fortran.smooth_abs_mean(np.abs(fft1[ind]),int(len(ind[0])))
+        corr[ind] /= smt**2
+        #corr[ind] /= smooth(np.abs(fft1[ind]),half_win=10) ** 2
+        #corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
+        t1=time.time()
+    elif method == 'coherence':
+        ind = np.where(np.abs(fft1)>0 )
+        #corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
+        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
+        ind = np.where(np.abs(fft2)>0 )
+        #corr[ind]  /= smooth(np.abs(fft2[ind]),half_win=5)
+        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
+    elif method == 'raw':
+        ind = 1
+    
+
+    corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
+    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
+    t2=time.time()
+
+    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
+    ind = np.where(np.abs(tcorr) <= maxlag)[0]
+    if axis == 1:
+        corr = corr[:,ind]
+    else:
+        corr = corr[ind]
+    tcorr=tcorr[ind]
+    t3=time.time()
+
+    print('it takes '+str(t1-t0)+' s '+str(t2-t1)+' s '+str(t3-t2)+' s')
+    return corr,tcorr    
+
+
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
     and returns the cross-correlation function between [-*maxlag*:*maxlag*].
@@ -600,8 +651,8 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
         ind = 1
 
     corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
-    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis))) 
- 
+    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
+
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
     ind = np.where(np.abs(tcorr) <= maxlag)[0]
     if axis == 1:

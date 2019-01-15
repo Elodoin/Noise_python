@@ -84,8 +84,10 @@ for ii in range(rank,splits+size-extra,size):
         source,receiver = pairs[ii][0],pairs[ii][1]
         print('source '+source.split('/')[-1]+' receiver '+receiver.split('/')[-1]+' rank '+str(rank))
 
+        t0=time.time()
         fft_h5   = source
         fft_ds_s = pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r')
+        t1=time.time()
         fft_h5   = receiver
         fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r')
         
@@ -97,7 +99,9 @@ for ii in range(rank,splits+size-extra,size):
         tindx = sta.index(staS)
         slat  = locs.iloc[tindx]['latitude']
         slon  = locs.iloc[tindx]['longitude']
+        t2=time.time()
         path_list_s = fft_ds_s.auxiliary_data[data_type].list()
+        t3=time.time()
 
         #------get receiver information--------
         net_sta_r = fft_ds_r.waveforms.list()[0]
@@ -126,7 +130,10 @@ for ii in range(rank,splits+size-extra,size):
             
             dataS_t = []
             fft1 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)
-            fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1]
+            t4=time.time()
+            fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1] 
+            t5=time.time()
+            print("it takes "+str(t1-t0)+" s "+str(t3-t2)+" s "+str(t5-t4)+" s")
             
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
 
@@ -165,9 +172,8 @@ for ii in range(rank,splits+size-extra,size):
                         continue
 
                     #-----------do daily cross-correlations now-----------
-                    corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1], \
-                            np.round(maxlag),dt,Nfft,method)
-
+                    #corr,tcorr=noise_module.fcorrelate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1],np.round(maxlag),dt,Nfft,method)
+                    corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1],np.round(maxlag),dt,Nfft,method)
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
                     nindx=tcomp.index(compS)*len(tcomp)+tcomp.index(compR)
