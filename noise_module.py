@@ -4,7 +4,7 @@ import itertools
 from datetime import datetime
 import copy
 import time
-import dsp_fortran
+#import dsp_fortran
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -406,8 +406,8 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
     left = J[0]
     right = J[-1]
     high = J[-1] + Napod
-    if high > Nfft / 2:
-        high = int(Nfft // 2)
+    if high > Nfft/2:
+        high = int(Nfft//2)
 
     FFTRawSign = scipy.fftpack.fft(data, Nfft,axis=axis)
     # Left tapering:
@@ -422,10 +422,10 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
         FFTRawSign[:,right:high] = np.cos(
             np.linspace(0., np.pi / 2., high - right)) ** 2 * np.exp(
             1j * np.angle(FFTRawSign[:,right:high]))
-        FFTRawSign[:,high:Nfft + 1] *= 0
+        FFTRawSign[:,high:Nfft//2] *= 0
 
         # Hermitian symmetry (because the input is real)
-        FFTRawSign[:,-(Nfft // 2) + 1:] = FFTRawSign[:,1:(Nfft // 2)].conjugate()[::-1]
+        FFTRawSign[:,-(Nfft//2)+1:] = FFTRawSign[:,1:(Nfft//2)].conjugate()[::-1]
     else:
         FFTRawSign[0:low] *= 0
         FFTRawSign[low:left] = np.cos(
@@ -437,10 +437,10 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
         FFTRawSign[right:high] = np.cos(
             np.linspace(0., np.pi / 2., high - right)) ** 2 * np.exp(
             1j * np.angle(FFTRawSign[right:high]))
-        FFTRawSign[high:Nfft + 1] *= 0
+        FFTRawSign[high:Nfft//2] *= 0
 
         # Hermitian symmetry (because the input is real)
-        FFTRawSign[-(Nfft // 2) + 1:] = FFTRawSign[1:(Nfft // 2)].conjugate()[::-1]
+        FFTRawSign[-(Nfft//2)+1:] = FFTRawSign[1:(Nfft//2)].conjugate()[::-1]
  
 
     return FFTRawSign
@@ -650,7 +650,11 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     elif method == 'raw':
         ind = 1
 
-    corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
+    #--------------------problems: [::-1] only flips along axis=0 direction------------------------
+    #corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
+    #----------------------------------------------------------------------------------------------
+
+    corr[:,-(Nfft//2)+1:]=np.flip(np.conj(corr[:,1:(Nfft // 2)]),axis=axis)
     corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
 
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt

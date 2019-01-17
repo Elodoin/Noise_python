@@ -32,16 +32,16 @@ this version is implemented with MPI (Nov.09.2018)
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_with_resp_with_whiten'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
 
 #-----some control parameters------
 data_type = 'FFT'
-save_day = True
+save_day = False
 downsamp_freq=20
 dt=1/downsamp_freq
 freqmin=0.05
@@ -84,10 +84,8 @@ for ii in range(rank,splits+size-extra,size):
         source,receiver = pairs[ii][0],pairs[ii][1]
         print('source '+source.split('/')[-1]+' receiver '+receiver.split('/')[-1]+' rank '+str(rank))
 
-        t0=time.time()
         fft_h5   = source
         fft_ds_s = pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r')
-        t1=time.time()
         fft_h5   = receiver
         fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r')
         
@@ -99,9 +97,7 @@ for ii in range(rank,splits+size-extra,size):
         tindx = sta.index(staS)
         slat  = locs.iloc[tindx]['latitude']
         slon  = locs.iloc[tindx]['longitude']
-        t2=time.time()
         path_list_s = fft_ds_s.auxiliary_data[data_type].list()
-        t3=time.time()
 
         #------get receiver information--------
         net_sta_r = fft_ds_r.waveforms.list()[0]
@@ -130,10 +126,8 @@ for ii in range(rank,splits+size-extra,size):
             
             dataS_t = []
             fft1 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)
-            t4=time.time()
             fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1] 
-            t5=time.time()
-            print("it takes "+str(t1-t0)+" s "+str(t3-t2)+" s "+str(t5-t4)+" s")
+            #print("it takes "+str(t1-t0)+" s "+str(t3-t2)+" s "+str(t5-t4)+" s")
             
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
 
@@ -180,10 +174,12 @@ for ii in range(rank,splits+size-extra,size):
 
                     #--------linear stackings---------
                     if corr.ndim==2:
+                        for kk in range(corr.shape[0]):
+                            corr[kk,:]=corr[kk,:]/max(corr[kk,:])
                         y = np.mean(corr,axis=0)
                         #y2 = noise_module.butter_pass(y,freqmin,freqmax,dt,2)
                     elif corr.ndim==1:
-                        y = corr
+                        y = corr/max(corr)
                     else:
                         continue
                     ncorr[nindx][:] = ncorr[nindx][:] + y
@@ -211,7 +207,7 @@ for ii in range(rank,splits+size-extra,size):
                             #------save the time domain cross-correlation functions-----
                             path = '_'.join(['ccfs',str(method),netS,staS,netR,staR,compS,compR,tday])
                             new_data_type = compS+compR
-                            crap = np.squeeze(corr)
+                            crap = corr
                             ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
 
                             #------save the freq domain cross-correlation functions for future C3-----

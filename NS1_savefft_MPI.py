@@ -35,16 +35,16 @@ t0=time.time()
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten_test'
 event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
 prepro=False    # do you need to reprocess the data?
 to_whiten=False   # do you want to whiten the spectrum?
-time_norm=False
+time_norm=True
 rm_resp=True
-pre_filt=[0.02,0.03,6,8]
+pre_filt=[0.02,0.03,4,6]
 downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
@@ -215,10 +215,21 @@ for ista in range (rank,splits+size-extra,size):
                     source_white = noise_module.whiten(dataS,dt,freqmin,freqmax)
                 else:
                     source_white = scipy.fftpack.fft(dataS, Nfft, axis=axis)
+                print(dataS[1,:])
+                print(source_white[1,:])
 
                 #------to normalize in time or not------
                 if time_norm:   
-                    white = np.real(scipy.fftpack.ifft(source_white, Nfft, axis=axis)) #/ Nt
+                    white = (scipy.fftpack.ifft(source_white, Nfft, axis=axis)) #/ Nt
+                    print(white[1,:])
+                    plt.subplot(211)
+                    plt.plot(dataS[1,:])
+                    plt.subplot(212)
+                    plt.plot(np.real(white[1,:]),'r')
+                    plt.plot(np.imag(white[1,:]),'g')
+                    plt.show()
+
+                    exit()
                     if norm_type == 'one_bit': 
                         white = np.sign(white)
                     elif norm_type == 'running_mean':
@@ -246,7 +257,7 @@ for ista in range (rank,splits+size-extra,size):
                     path = '_'.join(['fft',locs.iloc[ista]["network"] ,  locs.iloc[ista]["station"] ,comp ,savedate])
 
                     fft_ds.add_stationxml(inv1)
-                    crap[:,:Nfft//2-1]=np.squeeze(source_white[:,:Nfft//2-1])
+                    crap=source_white
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
                 del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
