@@ -28,23 +28,23 @@ by C.Jiang, T.Clements, M.Denolle
 
 t0=time.time()
 #------form the absolute paths-------
-#locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
+#locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
 #FFTDIR = '/n/regal/denolle_lab/cjiang/FFT'
 #event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten_test'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten'
 event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
 prepro=False    # do you need to reprocess the data?
-to_whiten=False   # do you want to whiten the spectrum?
-time_norm=True
+to_whiten=True   # do you want to whiten the spectrum?
+time_norm=False
 rm_resp=True
-pre_filt=[0.02,0.03,4,6]
+pre_filt=[0.04,0.05,4,6]
 downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
@@ -165,7 +165,7 @@ for ista in range (rank,splits+size-extra,size):
                 trace_madS = np.zeros(N)
                 trace_stdS = np.zeros(N) 
                 nonzeroS = np.zeros(N)
-                nptsS =np.zeros(N,dtype=np.int32)
+                nptsS =np.zeros((N,),dtype=np.int32)
                 source_slice = obspy.Stream()
 
                 #--------breaken a continous recording into pieces----------
@@ -215,21 +215,11 @@ for ista in range (rank,splits+size-extra,size):
                     source_white = noise_module.whiten(dataS,dt,freqmin,freqmax)
                 else:
                     source_white = scipy.fftpack.fft(dataS, Nfft, axis=axis)
-                print(dataS[1,:])
-                print(source_white[1,:])
 
                 #------to normalize in time or not------
                 if time_norm:   
-                    white = (scipy.fftpack.ifft(source_white, Nfft, axis=axis)) #/ Nt
-                    print(white[1,:])
-                    plt.subplot(211)
-                    plt.plot(dataS[1,:])
-                    plt.subplot(212)
-                    plt.plot(np.real(white[1,:]),'r')
-                    plt.plot(np.imag(white[1,:]),'g')
-                    plt.show()
+                    white = np.real(scipy.fftpack.ifft(source_white, Nfft, axis=axis)) #/ Nt
 
-                    exit()
                     if norm_type == 'one_bit': 
                         white = np.sign(white)
                     elif norm_type == 'running_mean':
@@ -238,15 +228,16 @@ for ista in range (rank,splits+size-extra,size):
                     del white
 
                 #-------------save FFTs as HDF5 files-----------------
-                crap=np.zeros(shape=(Nt,Nfft//2-1),dtype=np.complex64)
+                crap=np.zeros(shape=(Nt,Nfft//2),dtype=np.complex64)
                 fft_h5 = os.path.join(FFTDIR,locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"] + '.h5')
 
                 if not os.path.isfile(fft_h5):
                     with pyasdf.ASDFDataSet(fft_h5,mpi=False) as ds:
                         pass # create pyasdf file 
-                else:
-                    print(locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"],' already exists',obspy.UTCDateTime())
+                #else:
+                #    print(locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"],' already exists',obspy.UTCDateTime())
                 
+                tt0=time.time()
                 with pyasdf.ASDFDataSet(fft_h5,mpi=False) as fft_ds:
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
                         locs.iloc[ista],comp,Nfft,Nt)
@@ -260,6 +251,8 @@ for ista in range (rank,splits+size-extra,size):
                     crap=source_white
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
+                tt1=time.time()
+                print('write one day asdf takes '+str(tt1-tt0)+' s')
                 del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
 
             del tfiles

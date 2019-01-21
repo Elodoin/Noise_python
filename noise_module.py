@@ -4,8 +4,9 @@ import itertools
 from datetime import datetime
 import copy
 import time
-#import dsp_fortran
+import dsp_fortran
 import matplotlib.pyplot as plt
+from numba import jit 
 
 import numpy as np
 import scipy
@@ -176,66 +177,6 @@ def clean_up(corr,sampling_rate,freqmin,freqmax):
     corr = bandpass(corr,freqmin,freqmax,sampling_rate,zerophase=True)
     return corr
 
-def process_cc(stream,freqmin,freqmax,percent=0.05,max_len=20.,time_norm=True,norm_type='running_mean',Nfft=None):
-    """
-
-    Pre-process for cross-correlation. 
-
-    Checks ambient noise for earthquakesa and data gaps. 
-    Performs one-bit normalization and spectral whitening.
-    """
-    N = len(stream)
-    trace_mad = np.zeros(N)
-    trace_std = np.zeros(N)
-    nonzero = np.zeros(N)
-    stream.detrend(type='constant')
-    stream.detrend(type='linear')
-    stream.taper(max_percentage=percent,max_length=max_len)
-    stream.filter('bandpass',freqmin=freqmin,freqmax=freqmax,zerophase=True)
-    stream.detrend(type='constant')
-    scopy = stream.copy()
-    scopy = scopy.merge(method=1)[0]
-    all_mad = mad(scopy.data)
-    all_std = np.std(scopy.data)
-    del scopy 
-    npts = []
-    for ii,trace in enumerate(stream):
-        # check for earthquakes and spurious amplitudes
-        trace_mad[ii] = np.max(np.abs(trace.data))/all_mad
-        trace_std[ii] = np.max(np.abs(trace.data))/all_std
-
-        # check if data has zeros/gaps
-        nonzero[ii] = np.count_nonzero(trace.data)/trace.stats.npts
-        npts.append(trace.stats.npts)
-
-    # mask high amplitude phases, then whiten data
-    Nt = np.max(npts)
-    data = np.zeros([N,Nt])
-    for ii,trace in enumerate(stream):
-        data[ii,0:npts[ii]] = trace.data
-    
-    if data.ndim == 1:
-        axis = 0
-    elif data.ndim == 2:
-        axis = 1
-
-    FFTWhite = whiten(data,trace.stats.delta,freqmin,freqmax)
-
-    if time_norm:
-        if Nfft is None:
-            Nfft = next_fast_len(int(FFTWhite.shape[axis]))
-        white = np.real(scipy.fftpack.ifft(FFTWhite, Nfft,axis=axis)) / Nt
-        Nt = FFTWhite.shape[axis]
-        white = np.concatenate((white[:,-(Nt // 2) + 1:], white[:,:(Nt // 2) + 1]),axis=axis)
-        if norm_type == 'one_bit': 
-            white = np.sign(white)
-        elif norm_type == 'running_mean':
-            white = running_abs_mean(white,int(1 / freqmin / 2))
-        FFTWhite = scipy.fftpack.fft(white, Nfft,axis=axis)
-        FFTWhite[:,-(Nfft // 2) + 1:] = FFTWhite[:,1:(Nfft // 2)].conjugate()[::-1]
-
-    return FFTWhite,np.vstack([trace_mad,trace_std,nonzero]).T
-
 def mseed_data(mseed_dir,starttime = None,endtime = None):
     """
     
@@ -317,54 +258,6 @@ def sac_data(sac_dir,starttime = None,endtime = None):
         mseed,start,end = mseed[ind],start[ind],end[ind]
     return mseed,start,end 
 
-def myCorr(fft1,fft2, maxlag, Nfft=None):
-    """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
-    and returns the cross-correlation function between [-*maxlag*:*maxlag*].
-
-    :type fft1: :class:`numpy.ndarray`
-    :param fft1: This array contains the fft of each timeseries to be cross-correlated.
-    :type maxlag: int
-    :param maxlag: This number defines the number of samples (N=2*maxlag + 1) of the CCF that will be returned.
-
-    :rtype: :class:`numpy.ndarray`
-    :returns: The cross-correlation function between [-maxlag:maxlag]
-    """
-    # Speed up FFT by padding to optimal size for FFTPACK
-
-    if fft1.ndim == 1:
-        axis = 0
-    elif fft1.ndim == 2:
-        axis = 1
-
-    if Nfft is None:
-        Nfft = next_fast_len(int(fft1.shape[axis]))
-
-    normalized = False
-    allCpl = False
-
-    maxlag = np.round(maxlag)
-
-    Nt = fft1.shape[axis]
-
-    corr = np.conj(fft1) * fft2
-    corr = np.real(scipy.fftpack.ifft(corr, Nfft,axis=axis)) / Nt
-    corr = np.concatenate((corr[:,-Nt + 1:], corr[:,:Nt + 1]),axis=axis)
-
-    if normalized:
-        data_iff0 = scipy.fftpack.ifft(fft1, n=Nfft, axis=axis) ** 2
-        data_iff1 = scipy.fftpack.ifft(fft2, n=Nfft, axis=axis) ** 2
-        data = np.vstack([data_iff0,data_iff1])
-        E = np.prod(np.real(np.sqrt(np.mean(data, axis=axis))))
-
-        corr /= np.real(E)
-
-    if maxlag != Nt:
-        tcorr = np.arange(-Nt + 1, Nt)
-        dN = np.where(np.abs(tcorr) <= maxlag)[0]
-        corr = corr[:,dN]
-
-    return corr
-
 def whiten(data, delta, freqmin, freqmax,Nfft=None):
     """This function takes 1-dimensional *data* timeseries array,
     goes to frequency domain using fft, whitens the amplitude of the spectrum
@@ -425,7 +318,11 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
         FFTRawSign[:,high:Nfft//2] *= 0
 
         # Hermitian symmetry (because the input is real)
-        FFTRawSign[:,-(Nfft//2)+1:] = FFTRawSign[:,1:(Nfft//2)].conjugate()[::-1]
+        FFTRawSign[:,-(Nfft//2)+1:] = np.flip(np.conj(FFTRawSign[:,1:(Nfft//2)]),axis=axis)
+
+        #--------same problems as cc: [::-1] only flips along axis=0 direction--------
+        #FFTRawSign[:,-(Nfft//2)+1:] = FFTRawSign[:,1:(Nfft//2)].conjugate()[::-1]
+        #-----------------------------------------------------------------------------
     else:
         FFTRawSign[0:low] *= 0
         FFTRawSign[low:left] = np.cos(
@@ -562,54 +459,6 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict            
 
-def fcorrelate(fft1, fft2, maxlag, dt, Nfft, method="cross-correlation"):
-    if fft1.ndim == 1:
-        axis = 0
-        nwin=1
-    elif fft1.ndim == 2:
-        axis = 1
-        nwin= int(fft1.shape[0])
-
-    t0=time.time()
-    corr=np.zeros(shape=(nwin,Nfft//2-1),dtype=np.complex64)
-    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
-    #corr=dsp_fortran.correlate_decon(fft1,fft2,nwin,Nfft//2-1)
-
-    if method == 'deconv':
-        ind = np.where(np.abs(fft1)>0 )
-        smt = np.zeros(shape=(len(ind[0]),),dtype=np.float32)
-        smt=dsp_fortran.smooth_abs_mean(np.abs(fft1[ind]),int(len(ind[0])))
-        corr[ind] /= smt**2
-        #corr[ind] /= smooth(np.abs(fft1[ind]),half_win=10) ** 2
-        #corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
-        t1=time.time()
-    elif method == 'coherence':
-        ind = np.where(np.abs(fft1)>0 )
-        #corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
-        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
-        ind = np.where(np.abs(fft2)>0 )
-        #corr[ind]  /= smooth(np.abs(fft2[ind]),half_win=5)
-        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
-    elif method == 'raw':
-        ind = 1
-    
-
-    corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
-    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
-    t2=time.time()
-
-    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
-    ind = np.where(np.abs(tcorr) <= maxlag)[0]
-    if axis == 1:
-        corr = corr[:,ind]
-    else:
-        corr = corr[ind]
-    tcorr=tcorr[ind]
-    t3=time.time()
-
-    print('it takes '+str(t1-t0)+' s '+str(t2-t1)+' s '+str(t3-t2)+' s')
-    return corr,tcorr    
-
 
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
@@ -632,9 +481,8 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
         axis = 1
         nwin= int(fft1.shape[0])
 
-    #maxlag = np.round(maxlag)
     corr=np.zeros(shape=(nwin,Nfft),dtype=np.complex64)
-    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
+    corr[:,:Nfft//2]  = np.conj(fft1) * fft2
 
     if method == 'deconv':
         ind = np.where(np.abs(fft1)>0 )
@@ -653,8 +501,8 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     #--------------------problems: [::-1] only flips along axis=0 direction------------------------
     #corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
     #----------------------------------------------------------------------------------------------
-
-    corr[:,-(Nfft//2)+1:]=np.flip(np.conj(corr[:,1:(Nfft // 2)]),axis=axis)
+    
+    corr[:,-(Nfft//2)+1:]=np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis)
     corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
 
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
@@ -799,7 +647,7 @@ def running_abs_mean(x, N):
     """
     ndim = x.ndim 
     if ndim == 1:
-        weights = np.convolve(np.abs(x), np.ones((N, )) / N)[(N - 1):]
+        weights = np.convolve(x, np.ones(N, ) / N)[(N - 1):]
         x = x / weights 
     elif ndim == 2:
         for ii in range(x.shape[0]):
@@ -1621,6 +1469,48 @@ def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):
 	return denoised_img
 
 
+def fortran_correlate(fft1, fft2, maxlag, dt, Nfft, method="cross-correlation"):
+    if fft1.ndim == 1:
+        axis = 0
+        nwin=1
+    elif fft1.ndim == 2:
+        axis = 1
+        nwin= int(fft1.shape[0])
+
+    t0=time.time()
+    corr=np.zeros(shape=(nwin,Nfft//2-1),dtype=np.complex64)
+    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
+    #corr=dsp_fortran.correlate_decon(fft1,fft2,nwin,Nfft//2-1)
+
+    if method == 'deconv':
+        ind = np.where(np.abs(fft1)>0 )
+        smt = np.zeros(shape=(len(ind[0]),),dtype=np.float32)
+        smt=dsp_fortran.smooth_abs_mean(np.abs(fft1[ind]),int(len(ind[0])))
+        corr[ind] /= smt**2
+        t1=time.time()
+    elif method == 'coherence':
+        ind = np.where(np.abs(fft1)>0 )
+        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
+        ind = np.where(np.abs(fft2)>0 )
+        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
+    elif method == 'raw':
+        ind = 1
+    
+    corr[:,-(Nfft // 2)+1:] = np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis) # fill in the complex conjugate
+    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
+    t2=time.time()
+
+    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
+    ind = np.where(np.abs(tcorr) <= maxlag)[0]
+    if axis == 1:
+        corr = corr[:,ind]
+    else:
+        corr = corr[ind]
+    tcorr=tcorr[ind]
+    t3=time.time()
+
+    print('it takes '+str(t1-t0)+' s '+str(t2-t1)+' s '+str(t3-t2)+' s')
+    return corr,tcorr    
 
 if __name__ == "__main__":
     pass

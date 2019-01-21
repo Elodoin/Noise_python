@@ -125,10 +125,7 @@ for ii in range(rank,splits+size-extra,size):
             Nseg = fft_ds_s.auxiliary_data[data_type][paths].parameters['nseg']
             
             dataS_t = []
-            fft1 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)
-            fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2-1] 
-            #print("it takes "+str(t1-t0)+" s "+str(t3-t2)+" s "+str(t5-t4)+" s")
-            
+            fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2] 
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
 
             #-------day information------
@@ -142,10 +139,8 @@ for ii in range(rank,splits+size-extra,size):
                 if tpath in path_list_r:
                     pathr = tpath
                     print(str(pathr))
-                    dataR_t = []
-                    fft2 = np.zeros(shape=(Nseg,Nfft//2-1),dtype=np.complex64)           
-                    fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2-1]
-
+                    dataR_t = []        
+                    fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2]
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
                     
                     #date =fft_ds_r.auxiliary_data[data_type][pathr].parameters['starttime'] 
@@ -167,7 +162,7 @@ for ii in range(rank,splits+size-extra,size):
 
                     #-----------do daily cross-correlations now-----------
                     #corr,tcorr=noise_module.fcorrelate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1],np.round(maxlag),dt,Nfft,method)
-                    corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1],np.round(maxlag),dt,Nfft,method)
+                    corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2],fft2[indx2,:Nfft//2],np.round(maxlag),dt,Nfft,method)
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
                     nindx=tcomp.index(compS)*len(tcomp)+tcomp.index(compR)
@@ -241,7 +236,7 @@ for ii in range(rank,splits+size-extra,size):
             sac1.write(filename1,byteorder='big')
 
         #del pcorr
-        del fft_ds_s, fft_ds_r, path_list_r, path_list_s, fft1, fft2, dataS_t, dataR_t, source_std, receiver_std, ncorr
+        del fft_ds_s, fft_ds_r, path_list_r, path_list_s, fft1, fft2, source_std, receiver_std, ncorr
 
 comm.barrier()
 if rank == 0:
