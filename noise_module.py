@@ -4,9 +4,8 @@ import itertools
 from datetime import datetime
 import copy
 import time
-import dsp_fortran
 import matplotlib.pyplot as plt
-from numba import jit 
+from numba import jit,float32,int16 
 
 import numpy as np
 import scipy
@@ -515,6 +514,27 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
 
     return corr,tcorr
 
+def running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0)) 
+    return (cumsum[N:] - cumsum[:-N]) / N
+
+@jit('float32[:](float32[:],int16)')
+def running_ave(A,N):
+    '''
+    Numba compiled function to do running smooth average.
+    N is the the half window length to smooth
+    A and B are both 1-D arrays (which runs faster compared to 2-D operations)
+    '''
+    B = np.zeros(A.shape,A.dtype)
+    for pos in range(A.size):
+        tmp=0.
+        if pos<N or pos>A.shape[0]-N-1:
+            B[pos]=A[pos]
+        else:
+            for i in range(-N,N+1):
+                tmp+=A[pos+i]
+            B[pos]=tmp/(2*N+1)
+    return B
 
 def station_list(station):
     """
@@ -647,12 +667,12 @@ def running_abs_mean(x, N):
     """
     ndim = x.ndim 
     if ndim == 1:
-        weights = np.convolve(x, np.ones(N, ) / N)[(N - 1):]
-        x = x / weights 
+        x = np.convolve(x, np.ones(N, ) / N)[(N - 1):]
+        #x = x / weights 
     elif ndim == 2:
         for ii in range(x.shape[0]):
-            weights = np.convolve(np.abs(x[ii, :]), np.ones((N, )) / N)[(N - 1):]
-            x[ii, :] = x[ii, :] / weights
+            x[ii, :] = np.convolve(np.abs(x[ii, :]), np.ones((N, )) / N)[(N - 1):]
+            #x[ii, :] = x[ii, :] / weights
     return x
 
 def abs_max(arr):
