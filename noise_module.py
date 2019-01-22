@@ -525,16 +525,14 @@ def running_ave(A,N):
     N is the the half window length to smooth
     A and B are both 1-D arrays (which runs faster compared to 2-D operations)
     '''
+    A = np.r_[A[:N],A,A[-N:]]
     B = np.zeros(A.shape,A.dtype)
-    for pos in range(A.size):
+    for pos in range(N,A.size-N):
         tmp=0.
-        if pos<N or pos>A.shape[0]-N-1:
-            B[pos]=A[pos]
-        else:
-            for i in range(-N,N+1):
-                tmp+=A[pos+i]
-            B[pos]=tmp/(2*N+1)
-    return B
+        for i in range(-N,N+1):
+            tmp+=A[pos+i]
+        B[pos]=tmp/(2*N+1)
+    return B[N:-N-1]
 
 def station_list(station):
     """
