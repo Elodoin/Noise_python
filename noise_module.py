@@ -6,7 +6,7 @@ import copy
 import time
 import dsp_fortran
 import matplotlib.pyplot as plt
-from numba import jit 
+from numba import jit,float32,int16
 
 import numpy as np
 import scipy
@@ -459,6 +459,8 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict            
 
+def optimized_correlate(fft1,fft2,Nfft,method="cross-correlation"):
+    return
 
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
@@ -486,8 +488,13 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
 
     if method == 'deconv':
         ind = np.where(np.abs(fft1)>0 )
-        #corr[ind] /= smooth(np.abs(fft1[ind]),half_win=10) ** 2
-        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
+        t0=time.time()
+        temp = running_abs_mean(np.abs(fft1[ind]),10)
+        t1=time.time()
+        temp2 = running_ave(np.abs(fft1[ind]),10)
+        t2=time.time()
+        print('smoothing takes '+str(t1-t0)+' and '+str(t2-t1)+' s')
+        #corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
     elif method == 'coherence':
         ind = np.where(np.abs(fft1)>0 )
         #corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
@@ -514,6 +521,21 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     tcorr=tcorr[ind]
 
     return corr,tcorr
+
+@jit('float32[:](float32[:],int16)')
+def running_ave(A,N):
+    '''
+    Cuda kernel to do running smooth ave
+    A, B are both 1-D arrays
+    '''
+    A = np.r_[A[:N],A,A[-N:]]
+    B = np.zeros(A.shape,dtype=A.dtype)
+    for pos in range(N,A.size-N):
+        tmp=0.
+        for i in range(-N,N+1):
+            tmp+=A[pos+i]
+        B[pos]=tmp/(2*N+1)
+    return B[N:-N-1]
 
 
 def station_list(station):
@@ -642,7 +664,7 @@ def running_abs_mean(x, N):
     :type x:`~numpy.ndarray` 
     :type N: int
     :param N: Number of points to smooth over 
-    :returns: Array x, smoothed by running absolute mean of N points
+    :returns: Array x, smoothed by running absolute mean of N pointsx
     
     """
     ndim = x.ndim 
