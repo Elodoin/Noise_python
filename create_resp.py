@@ -15,7 +15,7 @@ locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.
 
 #-----common variables for extracting resp using evalresp function------
 water_level = 60
-prefilt = [0.008,0.01,4,6]
+prefilt = [0.04,0.05,4,6]
 downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
@@ -42,12 +42,16 @@ for ii in range(nsta):
 
     #---extract the resp------
     respz,freq=evalresp(dt,Nfft,tfile,tdate,station=station,channel=comp,network=network,locid='*',units='VEL',freq=True,debug=False)
-    #plt.subplot(211)
-    #plt.loglog(freq,np.absolute(respz))
+    plt.subplot(311)
+    plt.loglog(freq,np.absolute(respz))
     invert_spectrum(respz, water_level)
-    #plt.subplot(212)
-    #plt.loglog(freq,np.absolute(respz))
-    #plt.show()
+    plt.subplot(312)
+    plt.loglog(freq,np.absolute(respz))
+    cos_win = cosine_sac_taper(freq, flimit=prefilt)
+    respz *=cos_win
+    plt.subplot(313)
+    plt.loglog(freq,np.absolute(respz))
+    plt.show()
 
-    output = os.path.join(resp_dir,'resp_spectrum/resp.'+station+'.npy')
-    np.save(output,respz)
+    #output = os.path.join(resp_dir,'resp_spectrum/resp.'+station+'.npy')
+    #np.save(output,respz)

@@ -4,9 +4,8 @@ import itertools
 from datetime import datetime
 import copy
 import time
-import dsp_fortran
 import matplotlib.pyplot as plt
-from numba import jit,float32,int16
+from numba import jit,float32,int16 
 
 import numpy as np
 import scipy
@@ -459,8 +458,50 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict            
 
-def optimized_correlate(fft1,fft2,Nfft,method="cross-correlation"):
-    return
+def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross-correlation"):
+    '''
+    Optimized version of the correlation functions: put the smoothed 
+    source spectrum amplitude out of the inner for loop. 
+    It also takes advantage of the linear relationship of ifft, so that
+    stacking in spectrum first to reduce the total number of times for ifft,
+    which is the most time consuming steps in the previous correlate function  
+    '''
+    #t0=time.time()
+    if fft1.ndim == 1:
+        nwin=1
+    elif fft1.ndim == 2:
+        nwin= int(fft1.shape[0])
+
+    #------convert all 2D arrays into 1D to speed up--------
+    corr = np.zeros(nwin*(Nfft//2),dtype=np.complex64)
+    corr = np.conj(fft1.reshape(fft1.size,)) * fft2.reshape(fft2.size,)
+    fft1_smoothed_abs = fft1_smoothed_abs.reshape(fft1_smoothed_abs.size,)
+
+    if method == 'deconv':
+        #ind = np.where(fft1_smoothed_abs>0)
+        #corr[ind] /= moving_ave(np.abs(tmp[ind]),10)**2
+        corr /= fft1_smoothed_abs**2
+    elif method == 'coherence':
+        corr /= fft1_smoothed_abs
+        fft2_smoothed_abs = moving_ave(np.abs(fft2),10)
+        corr /= fft2_smoothed_abs
+    elif method == 'raw':
+        ind = 1
+
+    corr = corr.reshape(nwin,Nfft//2)
+    ncorr = np.zeros(shape=Nfft,dtype=np.complex64)
+    ncorr[:Nfft//2] = np.mean(corr,axis=0)
+    ncorr[-(Nfft//2)+1:]=np.flip(np.conj(ncorr[1:(Nfft//2)]),axis=0)
+    ncorr[0]=complex(0,0)
+    ncorr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(ncorr, Nfft, axis=0)))
+
+    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
+    ind   = np.where(np.abs(tcorr) <= maxlag)[0]
+    ncorr = ncorr[ind]
+    tcorr = tcorr[ind]
+    #t1=time.time()
+    #print('optimized takes '+str(t1-t0))
+    return ncorr,tcorr
 
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
@@ -475,7 +516,7 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     :returns: The cross-correlation function between [-maxlag:maxlag]
     """
     # Speed up FFT by padding to optimal size for FFTPACK
-
+    t0=time.time()
     if fft1.ndim == 1:
         axis = 0
         nwin=1
@@ -487,20 +528,13 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     corr[:,:Nfft//2]  = np.conj(fft1) * fft2
 
     if method == 'deconv':
-        ind = np.where(np.abs(fft1)>0 )
-        t0=time.time()
-        temp = running_abs_mean(np.abs(fft1[ind]),10)
-        t1=time.time()
-        temp2 = running_ave(np.abs(fft1[ind]),10)
-        t2=time.time()
-        print('smoothing takes '+str(t1-t0)+' and '+str(t2-t1)+' s')
+        ind = np.where(np.abs(fft1)>0)
+        corr[ind] /= moving_ave(np.abs(fft1[ind]),10)**2
         #corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
     elif method == 'coherence':
-        ind = np.where(np.abs(fft1)>0 )
-        #corr[ind]  /= smooth(np.abs(fft1[ind]),half_win=5)
+        ind = np.where(np.abs(fft1)>0)
         corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
-        ind = np.where(np.abs(fft2)>0 )
-        #corr[ind]  /= smooth(np.abs(fft2[ind]),half_win=5)
+        ind = np.where(np.abs(fft2)>0)
         corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
     elif method == 'raw':
         ind = 1
@@ -508,7 +542,7 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     #--------------------problems: [::-1] only flips along axis=0 direction------------------------
     #corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
     #----------------------------------------------------------------------------------------------
-    
+    corr[:,0] = complex(0,0)
     corr[:,-(Nfft//2)+1:]=np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis)
     corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
 
@@ -520,22 +554,28 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
         corr = corr[ind]
     tcorr=tcorr[ind]
 
+    t1=time.time()
+    print('original takes '+str(t1-t0))
     return corr,tcorr
 
+
 @jit('float32[:](float32[:],int16)')
-def running_ave(A,N):
+def moving_ave(A,N):
     '''
-    Cuda kernel to do running smooth ave
-    A, B are both 1-D arrays
+    Numba compiled function to do running smooth average.
+    N is the the half window length to smooth
+    A and B are both 1-D arrays (which runs faster compared to 2-D operations)
     '''
     A = np.r_[A[:N],A,A[-N:]]
-    B = np.zeros(A.shape,dtype=A.dtype)
+    B = np.ones(A.shape,A.dtype)
     for pos in range(N,A.size-N):
         tmp=0.
         for i in range(-N,N+1):
             tmp+=A[pos+i]
         B[pos]=tmp/(2*N+1)
-    return B[N:-N-1]
+        if B[pos]==0:
+            B[pos]=1
+    return B[N:-N]
 
 
 def station_list(station):
@@ -669,12 +709,12 @@ def running_abs_mean(x, N):
     """
     ndim = x.ndim 
     if ndim == 1:
-        weights = np.convolve(x, np.ones(N, ) / N)[(N - 1):]
-        x = x / weights 
+        x = np.convolve(x, np.ones(N, ) / N)[(N - 1):]
+        #x = x / weights 
     elif ndim == 2:
         for ii in range(x.shape[0]):
-            weights = np.convolve(np.abs(x[ii, :]), np.ones((N, )) / N)[(N - 1):]
-            x[ii, :] = x[ii, :] / weights
+            x[ii, :] = np.convolve(np.abs(x[ii, :]), np.ones((N, )) / N)[(N - 1):]
+            #x[ii, :] = x[ii, :] / weights
     return x
 
 def abs_max(arr):
@@ -1462,7 +1502,6 @@ def spect(tr,fmin = 0.1,fmax = None,wlen=10,title=None):
         plt.suptitle('{}.{}.{} {}'.format(tr.stats.network,tr.stats.station,
                   tr.stats.channel,tr.stats.starttime))
     plt.show()
-
 
 
 def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):

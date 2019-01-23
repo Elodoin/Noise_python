@@ -14,8 +14,6 @@ import noise_module
 import time
 import pyasdf
 import pandas as pd
-from obspy.clients.fdsn import Client
-
 from mpi4py import MPI
 
 '''
@@ -26,7 +24,7 @@ this version is implemented with MPI (Nov.09.2018)
 by C.Jiang, T.Clements, M.Denolle
 '''
 
-t0=time.time()
+t00=time.time()
 #------form the absolute paths-------
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
@@ -35,13 +33,13 @@ t0=time.time()
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_no_whiten_no_taper'
 event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum'
 
 #-----some control parameters------
 prepro=False    # do you need to reprocess the data?
-to_whiten=True   # do you want to whiten the spectrum?
+to_whiten=False   # do you want to whiten the spectrum?
 time_norm=False
 rm_resp=True
 pre_filt=[0.04,0.05,4,6]
@@ -88,7 +86,7 @@ for ista in range (rank,splits+size-extra,size):
     #time.sleep(rank/1000)
 
     if ista<splits:
-
+        t10=time.time()
         #----loop through each day on each core----
         for jj in range (len(tdir)):
             station = locs.iloc[ista]['station']
@@ -143,8 +141,8 @@ for ista in range (rank,splits+size-extra,size):
                     freq = np.linspace(0, fy, nfft // 2 + 1)
 
                     #-----apply a cosine taper to target freq-----
-                    cos_win = cosine_sac_taper(freq, flimit=pre_filt)
-                    source_spect *=cos_win
+                    #cos_win = cosine_sac_taper(freq, flimit=pre_filt)
+                    #source_spect *=cos_win
                     source_spect *=respz
                     source.data = np.fft.irfft(source_spect)[0:source.stats.npts]
                     #source.data=bandpass(source.data, freqmin, freqmax, downsamp_freq, corners=4, zerophase=False)
@@ -232,33 +230,35 @@ for ista in range (rank,splits+size-extra,size):
                 fft_h5 = os.path.join(FFTDIR,locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"] + '.h5')
 
                 if not os.path.isfile(fft_h5):
-                    with pyasdf.ASDFDataSet(fft_h5,mpi=False) as ds:
+                    with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:
                         pass # create pyasdf file 
                 #else:
                 #    print(locs.iloc[ista]["network"] + "." + locs.iloc[ista]["station"],' already exists',obspy.UTCDateTime())
                 
-                tt0=time.time()
-                with pyasdf.ASDFDataSet(fft_h5,mpi=False) as fft_ds:
+                #tt0=time.time()
+                with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
                         locs.iloc[ista],comp,Nfft,Nt)
                     savedate = '_'.join((str(dataS_stats.starttime.year),str(dataS_stats.starttime.month), \
                         str(dataS_stats.starttime.day)))
                     savedate = datetime.strptime(savedate,'%Y_%m_%d')
                     savedate = datetime.strftime(savedate,'%Y_%m_%d')
-                    path = '_'.join(['fft',locs.iloc[ista]["network"] ,  locs.iloc[ista]["station"] ,comp ,savedate])
+                    path = '_'.join(['fft',locs.iloc[ista]["network"], locs.iloc[ista]["station"], comp, savedate])
 
                     fft_ds.add_stationxml(inv1)
                     crap=source_white
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
-                tt1=time.time()
-                print('write one day asdf takes '+str(tt1-tt0)+' s')
+                #tt1=time.time()
+                #print('write one day asdf takes '+str(tt1-tt0)+' s')
                 del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
 
             del tfiles
+        t11=time.time()
+        print('it takes '+str(t11-t10)+' s to process one station in step 1')
 
-t1=time.time()
-print('step1 takes '+str(t1-t0)+' s')
+t01=time.time()
+print('step1 takes '+str(t01-t00)+' s')
 
 comm.barrier()
 
