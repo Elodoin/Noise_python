@@ -36,16 +36,16 @@ I/O speed (by 4 times)  (Jan,20,2019)
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_no_whiten_no_taper'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_10Hz'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_with_resp_no_whiten_no_taper'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_10Hz'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
 
 #-----some control parameters------
 data_type = 'FFT'
-save_day = False
+save_day = True
 downsamp_freq=20
 dt=1/downsamp_freq
 freqmin=0.05
@@ -53,8 +53,8 @@ freqmax=4
 cc_len=3600
 step=1800
 maxlag=800
-method='deconv'
-#method='raw'
+#method='deconv'
+method='raw'
 #method='coherence'
 
 #---------MPI-----------
@@ -96,9 +96,11 @@ for ii in range(rank,splits+size-extra,size):
         fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r')
         
         #-------get source information------
+        tt0=time.time()
         net_sta_s = fft_ds_s.waveforms.list()[0]
         staS = net_sta_s.split('.')[1]
         netS = net_sta_s.split('.')[0]
+        tt1=time.time()
 
         tindx = sta.index(staS)
         slat  = locs.iloc[tindx]['latitude']
@@ -121,7 +123,7 @@ for ii in range(rank,splits+size-extra,size):
         ncorr = np.zeros(shape=(indx.size,tlen),dtype=np.float32)
 
         t1=time.time()
-        print('prepare source+receiver takes '+str(t1-t0)+' s')
+        print('prepare source+receiver takes '+str(t1-t0)+' s; read station '+str(tt1-tt0))
         
         #---------loop through each component of the source------
         for jj in range(len(path_list_s)):
@@ -138,7 +140,7 @@ for ii in range(rank,splits+size-extra,size):
 
             tt0=time.time()
             #-----get smoothed spectrum of source for decon-type cross correlations----
-            sfft1 = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+            sfft1 = noise_module.running_abs_mean(np.abs(fft1.reshape(fft1.size,)),10)
             sfft1 = sfft1.reshape(Nseg,Nfft//2)
             t3=time.time()
             print('calculate smooth spec takes '+str(t3-tt0))
@@ -196,6 +198,7 @@ for ii in range(rank,splits+size-extra,size):
                     #y2 = noise_module.pws(np.array(corr),2,1/dt,5.)
                     
                     if save_day:
+                        t8=time.time()
                         #---------------keep the daily cross-correlation into a hdf5 file--------------
                         tsource = os.path.join(CCFDIR,netS+"."+staS)
                         if os.path.exists(tsource)==False:
@@ -224,6 +227,8 @@ for ii in range(rank,splits+size-extra,size):
                             #ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
 
                         del ccf_ds, crap, parameters, path, corr,tcorr
+                        t9=time.time()
+                        print('save sac takes '+str(t9-t8))
  
         #-------ready to write into files---------
         indx_array = np.where(indx==1)

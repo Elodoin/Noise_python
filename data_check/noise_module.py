@@ -560,7 +560,7 @@ def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
 
 
 @jit('float32[:](float32[:],int16)')
-def moving_ave(A,N):
+def moving_ave1(A,N):
     '''
     Numba compiled function to do running smooth average.
     N is the the half window length to smooth
@@ -571,7 +571,6 @@ def moving_ave(A,N):
     
     tmp=0.
     for pos in range(N,A.size-N):
-        # do summing only once
         if pos==N:
             for i in range(-N,N+1):
                 tmp+=A[pos+i]
@@ -581,6 +580,27 @@ def moving_ave(A,N):
         if B[pos]==0:
             B[pos]=1
     return B[N:-N]
+
+
+@jit('float32[:](float32[:],int16)')
+def moving_ave(A,N):
+    '''
+    Numba compiled function to do running smooth average.
+    N is the the half window length to smooth
+    A and B are both 1-D arrays (which runs faster compared to 2-D operations)
+    '''
+    A = np.r_[A[:N],A,A[-N:]]
+    B = np.zeros(A.shape,A.dtype)
+    
+    for pos in range(N,A.size-N):
+        tmp=0.
+        for i in range(-N,N+1):
+            tmp+=A[pos+i]
+        B[pos]=tmp/(2*N+1)
+        if B[pos]==0:
+            B[pos]=1
+    return B[N:-N]
+
 
 def station_list(station):
     """
