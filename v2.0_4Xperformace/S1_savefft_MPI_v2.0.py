@@ -33,7 +33,7 @@ t00=time.time()
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_no_whiten_no_taper'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_opt'
 event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum_20Hz'
 
@@ -52,7 +52,6 @@ freqmin=0.05   # minimum frequency to whiten in
 freqmax=3   # maximum frequency to whiten in
 #method='coherence' # type of normalization
 method='deconv' # type of normalization
-data_type = 'FFT'
 maxlag=800 # max lag to keep in the correlations
 #norm_type='one_bit'#running_mean'
 norm_type='running_mean'
@@ -244,12 +243,14 @@ for ista in range (rank,splits+size-extra,size):
                 with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
                         locs.iloc[ista],comp,Nfft,Nt)
+                    
                     savedate = '_'.join((str(dataS_stats.starttime.year),str(dataS_stats.starttime.month), \
                         str(dataS_stats.starttime.day)))
                     savedate = datetime.strptime(savedate,'%Y_%m_%d')
                     savedate = datetime.strftime(savedate,'%Y_%m_%d')
-                    path = '_'.join(['fft',locs.iloc[ista]["network"], locs.iloc[ista]["station"], comp, savedate])
+                    path = savedate
 
+                    data_type = str(comp)
                     fft_ds.add_stationxml(inv1)
                     crap[:,:Nfft//2]=source_white[:,:Nfft//2]
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)

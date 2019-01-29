@@ -27,7 +27,7 @@ first before doing ifft in cross-correlaiton functions and 3) sacrifice the disk
 I/O speed (by 4 times)  (Jan,20,2019)
 '''
 
-#ttt=time.time()
+ttt=time.time()
 #------some useful absolute paths-------
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT'
 #STACKDIR = '/n/flashlfs/mdenolle/KANTO/DATA/STACK'
@@ -121,7 +121,7 @@ for ii in range(rank,splits+size-extra,size):
         ncorr = np.zeros(shape=(indx.size,tlen),dtype=np.float32)
 
         t1=time.time()
-        print('prepare source+receiver takes '+str(t1-t0)+' s')
+        print('prepare S+R %6.4fs' % (t1-t0))
         
         #---------loop through each component of the source------
         for jj in range(len(path_list_s)):
@@ -141,7 +141,7 @@ for ii in range(rank,splits+size-extra,size):
             sfft1 = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
             sfft1 = sfft1.reshape(Nseg,Nfft//2)
             t3=time.time()
-            print('calculate smooth spec takes '+str(t3-tt0))
+            print('smooth spec %6.4fs' % (t3-tt0))
 
             #-------day information------
             tday  = paths[-10:]
@@ -177,7 +177,7 @@ for ii in range(rank,splits+size-extra,size):
                     corr,tcorr=noise_module.optimized_correlate(fft1[indx1,:Nfft//2],fft2[indx2,:Nfft//2],\
                             sfft1[indx1,:Nfft//2],np.round(maxlag),dt,Nfft,method)
                     t7=time.time()
-                    print('source read '+str(t3-t2)+'s, receiver '+str(t5-t4)+'s & len '+str(len(indx1))+', cross takes '+str(t7-t6)+'s')
+                    print('read S %6.4fs, R %6.4fs, cc %6.4fs' % ((t3-t2),(t5-t4),(t7-t6)))
 
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
@@ -254,8 +254,8 @@ for ii in range(rank,splits+size-extra,size):
         t11 = time.time()
         print('it takes '+str(t11-t10)+' s to process a station pair in step 2')
 
-#ttt1=time.time()
-#print('cc takes '+str(ttt1-ttt)+' s')
+ttt1=time.time()
+print('cc takes '+str(ttt1-ttt)+' s')
 
 comm.barrier()
 if rank == 0:
