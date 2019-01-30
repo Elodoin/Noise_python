@@ -458,7 +458,7 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict            
 
-def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,method="cross-correlation"):
+def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):
     '''
     Optimized version of the correlation functions: put the smoothed 
     source spectrum amplitude out of the inner for loop. 
@@ -466,11 +466,6 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,method="cross-cor
     stacking in spectrum first to reduce the total number of times for ifft,
     which is the most time consuming steps in the previous correlate function  
     '''
- 
-    if fft2.ndim == 1:
-        nwin=1
-    elif fft2.ndim == 2:
-        nwin= int(fft2.shape[0])
 
     #------convert all 2D arrays into 1D to speed up--------
     corr = np.zeros(nwin*(Nfft//2),dtype=np.complex64)
@@ -480,7 +475,7 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,method="cross-cor
         temp = moving_ave(np.abs(fft2.reshape(fft2.size,)),10)
         corr /= temp
 
-    corr = corr.reshape(nwin,Nfft//2)
+    corr  = corr.reshape(nwin,Nfft//2)
     ncorr = np.zeros(shape=Nfft,dtype=np.complex64)
     ncorr[:Nfft//2] = np.mean(corr,axis=0)
     ncorr[-(Nfft//2)+1:]=np.flip(np.conj(ncorr[1:(Nfft//2)]),axis=0)
@@ -490,9 +485,8 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,method="cross-cor
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
     ind   = np.where(np.abs(tcorr) <= maxlag)[0]
     ncorr = ncorr[ind]
-    tcorr = tcorr[ind]
     
-    return ncorr,tcorr
+    return ncorr
 
 def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross-correlation"):
     '''

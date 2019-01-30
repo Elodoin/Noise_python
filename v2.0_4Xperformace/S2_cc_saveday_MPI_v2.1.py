@@ -27,13 +27,12 @@ I/O speed (by 4 times)  (Jan,28,2019)
 
 ttt0=time.time()
 #------some useful absolute paths-------
-FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT_v2'
-CCFDIR = '/n/flashlfs/mdenolle/KANTO/DATA/CCF_v2_test'
+#FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT_v2'
+#CCFDIR = '/n/flashlfs/mdenolle/KANTO/DATA/CCF_v2'
 #STACKDIR = '/n/flashlfs/mdenolle/KANTO/DATA/STACK'
 #FFTDIR = '/n/regal/denolle_lab/cjiang/FFT1'
-#STACKDIR = '/n/regal/denolle_lab/cjiang/STACK1'
-locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
-events = '/n/home13/chengxin/cases/KANTO/events.txt'
+#locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
+#events = '/n/home13/chengxin/cases/KANTO/events.txt'
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_opt'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
@@ -73,7 +72,7 @@ else:
 
 #------split the common variables------
 splits = comm.bcast(splits,root=0)
-day  = comm.bcast(day,root=0)
+day    = comm.bcast(day,root=0)
 locs   = comm.bcast(locs,root=0)
 sta    = comm.bcast(sta,root=0)
 extra  = splits % size
@@ -164,8 +163,8 @@ for ii in range(rank,splits+size-extra,size):
                                     continue
 
                                 t6=time.time()
-                                corr,tcorr=noise_module.optimized_correlate1(sfft1[indx1,:],fft2[indx2,:],\
-                                        np.round(maxlag),dt,Nfft,method)
+                                corr=noise_module.optimized_correlate1(sfft1[indx1,:],fft2[indx2,:],\
+                                        np.round(maxlag),dt,Nfft,len(indx1),method)
                                 t7=time.time()
 
                                 #---------------keep daily cross-correlation into a hdf5 file--------------
@@ -190,13 +189,12 @@ for ii in range(rank,splits+size-extra,size):
                                 t8=time.time()
                                 print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t5-t4),(t7-t6),(t8-t7)))
 
-                                del ccf_ds, crap, parameters, path, corr, tcorr, fft2, receiver_std, path_list_r
-                    del fft1, source_std, sfft1
+                                del ccf_ds, path, path_list_r
                 del path_list_s
             del fft_ds_s
 
         t11 = time.time()
-        print('it takes '+str(t11-t10)+' s to process one day in step 2')
+        print('it takes %6.4fs to process one day in step 2' % (t11-t10))
 
 
 ttt1=time.time()
