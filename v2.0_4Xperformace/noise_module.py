@@ -24,8 +24,8 @@ from obspy.core.inventory import Inventory, Network, Station, Channel, Site
 from obspy.clients.nrl import NRL
 
 
-def stats2inv(stats,resp=None,filexml=None):
-   
+def stats2inv(stats,resp=None,filexml=None,locs=None):
+
 
     # We'll first create all the various objects. These strongly follow the
     # hierarchy of StationXML files.
@@ -35,38 +35,77 @@ def stats2inv(stats,resp=None,filexml=None):
         # The source should be the id whoever create the file.
         source="japan_from_resp")
 
-    net = Network(
-        # This is the network code according to the SEED standard.
-        code=stats.network,
-        # A list of stations. We'll add one later.
-        stations=[],
-        description="Marine created from SAC and resp files",
-        # Start-and end dates are optional.
-        start_date=stats.starttime)
+    if locs is None:
+        net = Network(
+            # This is the network code according to the SEED standard.
+            code=stats.network,
+            # A list of stations. We'll add one later.
+            stations=[],
+            description="Marine created from SAC and resp files",
+            # Start-and end dates are optional.
+            start_date=stats.starttime)
 
-    sta = Station(
-        # This is the station code according to the SEED standard.
-        code=stats.station,
-        latitude=stats.sac["stla"],
-        longitude=stats.sac["stlo"],
-        elevation=stats.sac["stel"],
-        creation_date=stats.starttime,
-        site=Site(name="First station"))
+        sta = Station(
+            # This is the station code according to the SEED standard.
+            code=stats.station,
+            latitude=stats.sac["stla"],
+            longitude=stats.sac["stlo"],
+            elevation=stats.sac["stel"],
+            creation_date=stats.starttime,
+            site=Site(name="First station"))
 
-    cha = Channel(
-        # This is the channel code according to the SEED standard.
-        code=stats.channel,
-        # This is the location code according to the SEED standard.
-        location_code=stats.location,
-        # Note that these coordinates can differ from the station coordinates.
-        latitude=stats.sac["stla"],
-        longitude=stats.sac["stlo"],
-        elevation=stats.sac["stel"],
-        depth=-stats.sac["stel"],
-        azimuth=stats.sac["cmpaz"],
-        dip=stats.sac["cmpinc"],
-        sample_rate=stats.sampling_rate)
-    
+        cha = Channel(
+            # This is the channel code according to the SEED standard.
+            code=stats.channel,
+            # This is the location code according to the SEED standard.
+            location_code=stats.location,
+            # Note that these coordinates can differ from the station coordinates.
+            latitude=stats.sac["stla"],
+            longitude=stats.sac["stlo"],
+            elevation=stats.sac["stel"],
+            depth=-stats.sac["stel"],
+            azimuth=stats.sac["cmpaz"],
+            dip=stats.sac["cmpinc"],
+            sample_rate=stats.sampling_rate)
+
+    else:
+        ista=locs[locs['station']==stats.station].index.values.astype('int64')[0]
+
+        net = Network(
+            # This is the network code according to the SEED standard.
+            code=locs.iloc[ista]["network"],
+            # A list of stations. We'll add one later.
+            stations=[],
+            description="Marine created from SAC and resp files",
+            # Start-and end dates are optional.
+            start_date=stats.starttime)
+
+        sta = Station(
+            # This is the station code according to the SEED standard.
+            code=locs.iloc[ista]["station"],
+            latitude=locs.iloc[ista]["latitude"],
+            longitude=locs.iloc[ista]["longitude"],
+            elevation=locs.iloc[ista]["elevation"],
+            creation_date=stats.starttime,
+            site=Site(name="First station"))
+        cha = Channel(
+            # This is the channel code according to the SEED standard.
+            code=stats.channel,
+            # This is the location code according to the SEED standard.
+            location_code=stats.location,
+            # Note that these coordinates can differ from the station coordinates.
+            latitude=locs.iloc[ista]["latitude"],
+            longitude=locs.iloc[ista]["longitude"],
+            elevation=locs.iloc[ista]["elevation"],
+            depth=-locs.iloc[ista]["elevation"],
+            azimuth=0,
+            dip=0,
+            sample_rate=stats.sampling_rate)
+
+
+
+
+
     response = obspy.core.inventory.response.Response()
     if resp is not None:
         print('i dont have the response')
@@ -114,18 +153,17 @@ def process_raw(st,downsamp_freq):
         - removes instrument response (pole-zero)
     """
 
-    day = 86400   # numbe of seconds in a day
+    #day = 86400   # numbe of seconds in a day
     if len(st) > 100:
         raise ValueError('Too many traces in Stream')
     st = check_sample(st)
 
     # check for traces with only zeros
     for tr in st:
-        if tr.data.max() == 0:
+        if all(data == 0 for data in tr.data):
             st.remove(tr)
     if len(st) == 0:
         raise ValueError('No traces in Stream')
-
     # for tr in st:
     #   tr.data = tr.data.astype(np.float)
     st = downsample(st,downsamp_freq) 
@@ -157,7 +195,7 @@ def process_raw(st,downsamp_freq):
         tr = check_and_phase_shift(tr)    
         if tr.data.dtype != 'float64':
             tr.data = tr.data.astype(np.float64)
-    
+
     #st.merge(method=1,fille_value=0.)[0]
 
     return st
