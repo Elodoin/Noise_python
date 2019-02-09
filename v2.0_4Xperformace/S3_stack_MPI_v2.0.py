@@ -11,6 +11,7 @@ from obspy.io.sac.sactrace import SACTrace
 import pyasdf
 from mpi4py import MPI
 
+t0=time.time()
 #----------some common variables here----------
 #CCFDIR = '/n/flashlfs/mdenolle/KANTO/DATA/CCF_deconv'
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
@@ -18,13 +19,12 @@ from mpi4py import MPI
 #STACKDIR = '/n/regal/denolle_lab/cjiang/STACK'
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
-t0=time.time()
-
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_opt'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK'
+
 maxlag = 800
-downsamp_freq=20
+downsamp_freq=10
 dt=1/downsamp_freq
 comp1 = ['EHE','EHN','EHZ']
 comp2 = ['HNE','HNN','HNU']
@@ -128,7 +128,7 @@ for ii in range(rank,splits+size-extra,size):
                     sac.write(filename,byteorder='big')
 
 t1=time.time()
-print('s3 takes '+str(t1-t0)+' s')
+print('S3 takes '+str(t1-t0)+' s')
 
 comm.barrier()
 if rank == 0:

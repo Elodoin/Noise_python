@@ -30,28 +30,23 @@ ttt0=time.time()
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT_v2'
 #CCFDIR = '/n/flashlfs/mdenolle/KANTO/DATA/CCF_v2'
 #STACKDIR = '/n/flashlfs/mdenolle/KANTO/DATA/STACK'
-#FFTDIR = '/n/regal/denolle_lab/cjiang/FFT1'
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
-#events = '/n/home13/chengxin/cases/KANTO/events.txt'
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_opt'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-events    = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/events.txt'
-
 
 #-----some control parameters------
-save_day = False
+flag=False              #output intermediate variables and computing times
+smooth_N=10             #window length for smoothing the spectrum amplitude
 downsamp_freq=20
 dt=1/downsamp_freq
-freqmin=0.05
-freqmax=4
 cc_len=3600
 step=1800
 maxlag=800
 method='deconv'
-#method='raw'
-#method='coherence'
+start_date = '2010_01_10'
+end_date   = '2010_01_12'
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -64,8 +59,7 @@ size = comm.Get_size()
 if rank ==0:
     locs = pd.read_csv(locations)
     sta  = list(locs.iloc[:]['station'])
-    daylists = pd.read_csv(events)
-    day  = list(daylists.iloc[:]['days'])
+    day = noise_module.get_event_list(start_date,end_date)
     splits = len(day)
 else:
     splits,locs,sta,day = [None for _ in range(4)]
@@ -91,107 +85,107 @@ for ii in range(rank,splits+size-extra,size):
             source = os.path.join(FFTDIR,netS+'.'+staS+'.h5')
             if not os.path.isfile(source):
                 continue
-            fft_ds_s = pyasdf.ASDFDataSet(source, mpi=False, mode='r')
-            data_types_s = fft_ds_s.auxiliary_data.list()
-            
-            #----loop II of each component for source A------
-            for icompS in range(len(data_types_s)):
-                data_type_s = data_types_s[icompS]
-                path_list_s = fft_ds_s.auxiliary_data[data_type_s].list()
 
-                #--------iday exists for source A------
-                if iday in path_list_s:
-                    paths = iday
+            with pyasdf.ASDFDataSet(source, mpi=False, mode='r') as fft_ds_s:
+                data_types_s = fft_ds_s.auxiliary_data.list()
+                
+                #----loop II of each component for source A------
+                for icompS in range(len(data_types_s)):
+                    if flag:
+                        print("reading source %s for day %s" % (staS,icompS))
+                    data_type_s = data_types_s[icompS]
+                    path_list_s = fft_ds_s.auxiliary_data[data_type_s].list()
 
-                    t1=time.time()
-                    #-----------get the parameter of Nfft-----------
-                    Nfft = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['nfft']
-                    Nseg = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['nseg']
-                    
-                    fft1 = fft_ds_s.auxiliary_data[data_type_s][paths].data[:,:Nfft//2] 
-                    source_std = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['std']
-                    
-                    t2=time.time()
-                    #-----------get the smoothed source spectrum for decon later----------
-                    if method == 'deconv':
-                        temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
-                        sfft1 = np.conj(fft1.reshape(fft1.size,))/temp**2
-                    elif method == 'coherence':
-                        temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
-                        sfft1 = np.conj(fft1.reshape(fft1.size,))/temp
-                    elif method == 'raw':
-                        sfft1 = fft1
-                    sfft1 = sfft1.reshape(Nseg,Nfft//2)
+                    #--------iday exists for source A------
+                    if iday in path_list_s:
+                        paths = iday
 
-                    t3=time.time()
-                    print('read S %6.4fs, smooth %6.4fs' % ((t2-t1), (t3-t2)))
+                        t1=time.time()
+                        #-----------get the parameter of Nfft-----------
+                        Nfft = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['nfft']
+                        Nseg = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['nseg']
+                        
+                        fft1 = fft_ds_s.auxiliary_data[data_type_s][paths].data[:,:Nfft//2] 
+                        source_std = fft_ds_s.auxiliary_data[data_type_s][paths].parameters['std']
+                        
+                        t2=time.time()
+                        #-----------get the smoothed source spectrum for decon later----------
+                        if method == 'deconv':
+                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+                            sfft1 = np.conj(fft1.reshape(fft1.size,))/temp**2
+                        elif method == 'coherence':
+                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+                            sfft1 = np.conj(fft1.reshape(fft1.size,))/temp
+                        elif method == 'raw':
+                            sfft1 = fft1
+                        sfft1 = sfft1.reshape(Nseg,Nfft//2)
 
-                    #-----------now loop III of each receiver B----------
-                    for ireceiver in range(isource+1,len(sta)):
-                        staR = locs.iloc[ireceiver]['station']
-                        netR = locs.iloc[ireceiver]['network']
+                        t3=time.time()
+                        if flag:
+                            print('read S %6.4fs, smooth %6.4fs' % ((t2-t1), (t3-t2)))
 
-                        receiver = os.path.join(FFTDIR,netR+'.'+staR+'.h5')
-                        if not os.path.isfile(receiver):
-                            continue
-                        fft_ds_r = pyasdf.ASDFDataSet(receiver, mpi=False, mode='r')
-                        data_types_r = fft_ds_r.auxiliary_data.list()
+                        #-----------now loop III of each receiver B----------
+                        for ireceiver in range(isource+1,len(sta)):
+                            staR = locs.iloc[ireceiver]['station']
+                            netR = locs.iloc[ireceiver]['network']
 
-                        #-----loop IV of each component for receiver B------
-                        for icompR in range(len(data_types_r)):
-                            data_type_r = data_types_r[icompR]
-                            path_list_r = fft_ds_r.auxiliary_data[data_type_r].list()
+                            receiver = os.path.join(FFTDIR,netR+'.'+staR+'.h5')
+                            if not os.path.isfile(receiver):
+                                continue
+                            
+                            with pyasdf.ASDFDataSet(receiver, mpi=False, mode='r') as fft_ds_r:
+                                data_types_r = fft_ds_r.auxiliary_data.list()
 
-                            #----if that day exists for receiver B----
-                            if iday in path_list_r:
-                                pathr = iday
+                                #-----loop IV of each component for receiver B------
+                                for icompR in range(len(data_types_r)):
+                                    data_type_r = data_types_r[icompR]
+                                    path_list_r = fft_ds_r.auxiliary_data[data_type_r].list()
 
-                                t4=time.time()
-                                fft2= fft_ds_r.auxiliary_data[data_type_r][pathr].data[:,:Nfft//2]
-                                receiver_std = fft_ds_r.auxiliary_data[data_type_r][pathr].parameters['std']
-                                t5=time.time()
+                                    #----if that day exists for receiver B----
+                                    if iday in path_list_r:
+                                        pathr = iday
 
-                                #---------- check the existence of earthquakes ----------
-                                rec_ind = np.where(receiver_std < 10)[0]
-                                sou_ind = np.where(source_std < 10)[0]
+                                        t4=time.time()
+                                        fft2= fft_ds_r.auxiliary_data[data_type_r][pathr].data[:,:Nfft//2]
+                                        receiver_std = fft_ds_r.auxiliary_data[data_type_r][pathr].parameters['std']
+                                        t5=time.time()
 
-                                #-----note that Hi-net has a few mi-secs differences to Mesonet in terms starting time-----
-                                bb,indx1,indx2=np.intersect1d(sou_ind,rec_ind,return_indices=True)
-                                indx1=sou_ind[indx1]
-                                indx2=rec_ind[indx2]
-                                if (len(indx1)==0) | (len(indx2)==0):
-                                    continue
+                                        #---------- check the existence of earthquakes ----------
+                                        rec_ind = np.where(receiver_std < 10)[0]
+                                        sou_ind = np.where(source_std < 10)[0]
 
-                                t6=time.time()
-                                corr=noise_module.optimized_correlate1(sfft1[indx1,:],fft2[indx2,:],\
-                                        np.round(maxlag),dt,Nfft,len(indx1),method)
-                                t7=time.time()
+                                        #-----note that Hi-net has a few mi-secs differences to Mesonet in terms starting time-----
+                                        bb,indx1,indx2=np.intersect1d(sou_ind,rec_ind,return_indices=True)
+                                        indx1=sou_ind[indx1]
+                                        indx2=rec_ind[indx2]
+                                        if (len(indx1)==0) | (len(indx2)==0):
+                                            continue
 
-                                #---------------keep daily cross-correlation into a hdf5 file--------------
-                                cc_aday_h5 = os.path.join(CCFDIR,iday+'.h5')
-                                crap   = np.zeros(corr.shape)
+                                        t6=time.time()
+                                        corr=noise_module.optimized_correlate1(sfft1[indx1,:],fft2[indx2,:],\
+                                                np.round(maxlag),dt,Nfft,len(indx1),method)
+                                        t7=time.time()
 
-                                if not os.path.isfile(cc_aday_h5):
-                                    with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ds:
-                                        pass 
-                                #else:
-                                #    print([netS+"."+staS+"."+netR+"."+staR+'.h5', 'Already exists',obspy.UTCDateTime()])
+                                        #---------------keep daily cross-correlation into a hdf5 file--------------
+                                        cc_aday_h5 = os.path.join(CCFDIR,iday+'.h5')
+                                        crap   = np.zeros(corr.shape)
 
-                                with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ccf_ds:
-                                    parameters = {'dt':dt, 'maxlag':maxlag, 'method':str(method)}
+                                        if not os.path.isfile(cc_aday_h5):
+                                            with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ds:
+                                                pass 
 
-                                    #------save the time domain cross-correlation functions-----
-                                    path = '_'.join([netR,staR,data_type_r])
-                                    new_data_type = netS+'s'+staS+'s'+data_type_s
-                                    crap = corr
-                                    ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
+                                        with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ccf_ds:
+                                            parameters = {'dt':dt, 'maxlag':maxlag, 'method':str(method)}
 
-                                t8=time.time()
-                                print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t5-t4),(t7-t6),(t8-t7)))
+                                            #------save the time domain cross-correlation functions-----
+                                            path = '_'.join([netR,staR,data_type_r])
+                                            new_data_type = netS+'s'+staS+'s'+data_type_s
+                                            crap = corr
+                                            ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
 
-                                del ccf_ds, path, path_list_r
-                del path_list_s
-            del fft_ds_s
+                                        t8=time.time()
+                                        if flag:
+                                            print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t5-t4),(t7-t6),(t8-t7)))
 
         t11 = time.time()
         print('it takes %6.4fs to process one day in step 2' % (t11-t10))

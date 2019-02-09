@@ -1,6 +1,5 @@
 import os
 import glob
-import itertools
 from datetime import datetime
 import copy
 import time
@@ -19,13 +18,13 @@ import pyasdf
 import pandas as pd
 from obspy import read_inventory
 from obspy.core import AttribDict
+from obspy.signal.util import _npts2nfft
 from obspy.signal.invsim import cosine_taper
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site
 from obspy.clients.nrl import NRL
 
 
 def stats2inv(stats,resp=None,filexml=None,locs=None):
-
 
     # We'll first create all the various objects. These strongly follow the
     # hierarchy of StationXML files.
@@ -101,10 +100,6 @@ def stats2inv(stats,resp=None,filexml=None,locs=None):
             azimuth=0,
             dip=0,
             sample_rate=stats.sampling_rate)
-
-
-
-
 
     response = obspy.core.inventory.response.Response()
     if resp is not None:
@@ -199,6 +194,126 @@ def process_raw(st,downsamp_freq):
     #st.merge(method=1,fille_value=0.)[0]
 
     return st
+
+def resp_spectrum(source,resp_dir,downsamp_freq,sta):
+    '''
+    remove the instrument response with response spectrum from evalresp.
+    the response spectrum is evaluated based on RESP/PZ files and then 
+    inverted using obspy function of invert_spectrum. they are stored as
+    nyc file in directory of resp_dir. 
+    '''
+    #---------do the downsampling here--------
+    if downsamp_freq != source.stats.sampling_rate:
+        source = downsample(source,downsamp_freq)
+    
+    dt=1/source.stats.sampling_rate
+
+    #-----load the instrument response nyc file-----
+    resp_file = os.path.join(resp_dir,'resp.'+sta+'.npy')
+    if not os.path.isfile(resp_file):
+        print("no instrument response for "+sta)
+        return
+
+    respz = np.load(resp_file)
+
+    #----------do fft now----------
+    nfft = _npts2nfft(source.stats.npts)
+    source_spect = np.fft.rfft(source.data,n=nfft)
+
+    fy = 1 / (dt * 2.0)
+    freq = np.linspace(0, fy, nfft // 2 + 1)
+
+    #-----apply a cosine taper to target freq-----
+    source_spect *=respz
+    source.data = np.fft.irfft(source_spect)[0:source.stats.npts]
+    return source
+
+def get_event_list(str1,str2):
+    '''
+    return the event list in the formate of 2010_01_01, as used
+    in the path variables of the ASDF files for each station
+    
+    y1: integer, the starting year
+    m1: integer, the starting month
+    y2: integer, the ending year
+    m2; integer, the ending month
+    '''
+
+    event = []
+    date1=str1.split('_')
+    date2=str2.split('_')
+    y1=int(date1[0])
+    m1=int(date1[1])
+    d1=int(date1[2])
+    y2=int(date2[0])
+    m2=int(date2[1])
+    d2=int(date2[2])
+
+    #----same year----
+    if y1==y2:
+        year=y1
+        #---same month----
+        if m1==m2:
+            month=m1
+            for iday in range(d1,d2+1):
+                temp = str('%04d_%02d_%02d' % (year,month,iday))
+                event.append(temp)
+        #----different months-----
+        else:
+            for jj in range(m1,m2+1):
+                month = jj
+
+                if jj==1 or jj==3 or jj==5 or jj==7 or jj==9 or jj==10 or jj==12:
+                    days = 31
+                elif jj==2:
+                    if (year == 4*(year//4)):
+                        days=29
+                    else:
+                        days = 28
+                else:
+                    days = 30
+                
+                if jj==m1:
+                    b1,b2=d1,days
+                elif jj==m2:
+                    b1,b2=1,d2
+                else:
+                    b1,b2=1,days
+                
+                for iday in range(b1,b2):
+                    temp = str('%04d_%02d_%02d' % (year,month,iday))
+                    event.append(temp)
+    else:
+        for year in range(y1,y2+1):
+            
+            #----define the bounds for months----
+            if year==y1:
+                b1=m1
+                b2=13
+            elif year==y2:
+                b1=1
+                b2=m2
+            else:
+                b1=1
+                b2=13
+
+            for jj in range(b1,b2):
+                month = jj
+
+                if jj==1 or jj==3 or jj==5 or jj==7 or jj==9 or jj==10 or jj==12:
+                    days = 31
+                elif jj==2:
+                    if (year == 4*(year//4)):
+                        days=29
+                    else:
+                        days = 28
+                else:
+                    days = 30
+                
+                for iday in range(1,days+1):
+                    temp = str('%04d_%02d_%02d' % (year,month,iday))
+                    event.append(temp)
+    return event
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
@@ -1599,50 +1714,6 @@ def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):
 		denoised_img = wiener(img_to_denoise,Ntau,np.mean(temp))
 
 	return denoised_img
-
-
-def fortran_correlate(fft1, fft2, maxlag, dt, Nfft, method="cross-correlation"):
-    if fft1.ndim == 1:
-        axis = 0
-        nwin=1
-    elif fft1.ndim == 2:
-        axis = 1
-        nwin= int(fft1.shape[0])
-
-    t0=time.time()
-    corr=np.zeros(shape=(nwin,Nfft//2-1),dtype=np.complex64)
-    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
-    #corr=dsp_fortran.correlate_decon(fft1,fft2,nwin,Nfft//2-1)
-
-    if method == 'deconv':
-        ind = np.where(np.abs(fft1)>0 )
-        smt = np.zeros(shape=(len(ind[0]),),dtype=np.float32)
-        smt=dsp_fortran.smooth_abs_mean(np.abs(fft1[ind]),int(len(ind[0])))
-        corr[ind] /= smt**2
-        t1=time.time()
-    elif method == 'coherence':
-        ind = np.where(np.abs(fft1)>0 )
-        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
-        ind = np.where(np.abs(fft2)>0 )
-        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
-    elif method == 'raw':
-        ind = 1
-    
-    corr[:,-(Nfft // 2)+1:] = np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis) # fill in the complex conjugate
-    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
-    t2=time.time()
-
-    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
-    ind = np.where(np.abs(tcorr) <= maxlag)[0]
-    if axis == 1:
-        corr = corr[:,ind]
-    else:
-        corr = corr[ind]
-    tcorr=tcorr[ind]
-    t3=time.time()
-
-    print('it takes '+str(t1-t0)+' s '+str(t2-t1)+' s '+str(t3-t2)+' s')
-    return corr,tcorr    
 
 if __name__ == "__main__":
     pass
