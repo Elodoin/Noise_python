@@ -1,7 +1,6 @@
 import os
 import sys
 import glob
-from datetime import datetime
 import numpy as np
 import scipy
 import obspy

@@ -315,6 +315,17 @@ def get_event_list(str1,str2):
                     event.append(temp)
     return event
 
+def get_station_pairs(sta):
+    '''
+    construct station pairs based on the station list
+    works same way as the function of itertools
+    '''
+    pairs=[]
+    for ii in range(len(sta)-1):
+        for jj in range(ii+1,len(sta)):
+            pairs.appen((sta[ii],sta[jj]))
+    return pairs
+
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
         axis = 1
