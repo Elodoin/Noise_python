@@ -110,10 +110,10 @@ for ii in range(rank,splits+size-extra,size):
                         t2=time.time()
                         #-----------get the smoothed source spectrum for decon later----------
                         if method == 'deconv':
-                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),smooth_N)
                             sfft1 = np.conj(fft1.reshape(fft1.size,))/temp**2
                         elif method == 'coherence':
-                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+                            temp = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),smooth_N)
                             sfft1 = np.conj(fft1.reshape(fft1.size,))/temp
                         elif method == 'raw':
                             sfft1 = fft1

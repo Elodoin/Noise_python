@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import pyasdf
+import pandas as pd
 import noise_module
 from mpi4py import MPI
 
@@ -19,38 +20,72 @@ t0=time.time()
 
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-CCFDIR_C3 = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
+C3DIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
 
-flag = True
-vel = [1,3]
+flag  = False
+vmin  = 1.5
+vmax  = 3
+wcoda = 500
 maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
 
+#---------MPI-----------
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+#-----------------------
+
 if rank == 0:
     #----check the directory of STACK----
-    if os.path.exists(CCFDIR_C3)==False:
-        os.mkdir(CCFDIR_C3)
+    if os.path.exists(C3DIR)==False:
+        os.mkdir(C3DIR)
 
     #-----other variables to share-----
     locs = pd.read_csv(locations)
-    sta  = list(locs.iloc[:]['station'])
-    pairs= noise_module.get_station_pairs(sta)
-    ccfs = glob.glob(os.path.join(CCFDIR,'*.h5'))
-    splits = len(pairs)
+    daily_ccfs = glob.glob(os.path.join(C3DIR,'*.h5'))
+    splits = len(daily_ccfs)
 else:
-    locs,sta,ccfs,splits=[None for _ in range(4)]
+    locs,daily_ccfs,splits=[None for _ in range(4)]
 
 locs   = comm.bcast(locs,root=0)
-pairs  = comm.bcast(pairs,root=0)
-ccfs   = comm.bcast(ccfs,root=0)
+daily_ccfs   = comm.bcast(daily_ccfs,root=0)
 splits = comm.bcast(splits,root=0)
 extra  = splits % size
 
 for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
-        iday = day[ii]
-#-----loop through each station pair-----
+        dayfile = daily_ccfs[ii]
+        sta  = list(locs.iloc[:]['station'])
+
+        with pyasdf.ASDFDataSet(dayfile,mpi=False,mode='r') as ds:
+            data_types = ds.auxiliary_data.list()
+
+            #-----loop through each station pair-----
+            for ii in range(len(sta)-1):
+                for jj in range(ii+1,len(sta)):
+
+                    #----source and receiver information----
+                    source = sta[ii]
+                    receiver = sta[jj]
+                    indx = sta.index(source)
+                    slat = locs.iloc[indx]['latitude']
+                    slon = locs.iloc[indx]['longitude']
+                    netS = locs.iloc[indx]['network']
+                    indx = sta.index(receiver)
+                    rlat = locs.iloc[indx]['latitude']
+                    rlon = locs.iloc[indx]['longitude']
+                    netR = locs.iloc[indx]['network']
+
+                    #----calculate window for cutting the ccfs-----
+
+                    #------construct the data_type and path lists for X-A, and X-B ccfs-----
+
+                    #---------a for loop through all 4 lag windonw--------
+
+
+                    #---------stacking---------
+
 
 #---------record its spectrum--------

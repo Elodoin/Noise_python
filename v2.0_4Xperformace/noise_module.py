@@ -1,5 +1,6 @@
 import os
 import glob
+import math
 from datetime import datetime
 import copy
 import time
@@ -326,6 +327,22 @@ def get_station_pairs(sta):
             pairs.append((sta[ii],sta[jj]))
     return pairs
 
+@jit(float32(float32,float32,float32,float32)) 
+def get_distance(lon1,lat1,lon2,lat2):
+    '''
+    calculate distance between two points on earth
+    '''
+    R = 6372800  # Earth radius in meters
+    
+    phi1, phi2 = math.radians(lat1), math.radians(lat2) 
+    dphi       = math.radians(lat2 - lat1)
+    dlambda    = math.radians(lon2 - lon1)
+    
+    a = math.sin(dphi/2)**2 + \
+        math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    
+    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
         axis = 1
@@ -505,28 +522,6 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
 
     return FFTRawSign
 
-def nearest_step(t1,t2,step):
-    step_min = step / 60
-    if t1 == t2:
-        return t1,t2
-
-    day1,hour1,minute1,second1 = t1.day,t1.hour,t1.minute,t1.second
-    day2,hour2,minute2,second2 = t2.day,t2.hour,t2.minute,t2.second
-
-    start1 = obspy.UTCDateTime(t1.year,t1.month,t1.day)
-    start2 = obspy.UTCDateTime(t2.year,t2.month,t2.day)
-
-    t1s = np.array([start1 + s for s in range(0,86400+step,step)])
-    t2s = np.array([start2 + s for s in range(0,86400+step,step)])
-    t1diff = [t - t1 for t in t1s]
-    t2diff = [t - t2 for t in t2s]
-    ind1 = np.argmin(np.abs(t1diff))
-    ind2 = np.argmin(np.abs(t2diff))
-    t1 = t1s[ind1]
-    t2 = t2s[ind2]
-
-    return t1,t2
-
 def filter_dist(pairs,locs,min_dist,max_dist):
     """
 
@@ -603,24 +598,7 @@ def cross_corr_parameters(source, receiver, start_end_t, source_params,
             'endtime':endtime}
     parameters.update(source)
     parameters.update(receiver)
-    return parameters   
-
-def stats_to_dict(stats,stat_type):
-    """
-
-    Converts obspy.core.trace.Stats object to dict
-
-    :type stats: `~obspy.core.trace.Stats` object.
-    :type source: str
-    :param source: 'source' or 'receiver'
-    """
-    stat_dict = {'{}_network'.format(stat_type):stats['network'],
-                 '{}_station'.format(stat_type):stats['station'],
-                 '{}_channel'.format(stat_type):stats['channel'],
-                 '{}_delta'.format(stat_type):stats['delta'],
-                 '{}_npts'.format(stat_type):stats['npts'],
-                 '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
-    return stat_dict            
+    return parameters    
 
 def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):
     '''
@@ -651,50 +629,6 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cros
     ncorr = ncorr[ind]
     
     return ncorr
-
-def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross-correlation"):
-    '''
-    Optimized version of the correlation functions: put the smoothed 
-    source spectrum amplitude out of the inner for loop. 
-    It also takes advantage of the linear relationship of ifft, so that
-    stacking in spectrum first to reduce the total number of times for ifft,
-    which is the most time consuming steps in the previous correlate function  
-    '''
- 
-    if fft1.ndim == 1:
-        nwin=1
-    elif fft1.ndim == 2:
-        nwin= int(fft1.shape[0])
-
-    #------convert all 2D arrays into 1D to speed up--------
-    corr = np.zeros(nwin*(Nfft//2),dtype=np.complex64)
-    corr = np.conj(fft1.reshape(fft1.size,)) * fft2.reshape(fft2.size,)
-    fft1_smoothed_abs = fft1_smoothed_abs.reshape(fft1_smoothed_abs.size,)
-
-    if method == 'deconv':
-        #ind = np.where(fft1_smoothed_abs>0)
-        #corr[ind] /= moving_ave(np.abs(tmp[ind]),10)**2
-        corr /= fft1_smoothed_abs**2
-    elif method == 'coherence':
-        corr /= fft1_smoothed_abs
-        fft2_smoothed_abs = moving_ave(np.abs(fft2),10)
-        corr /= fft2_smoothed_abs
-    elif method == 'raw':
-        ind = 1
-
-    corr = corr.reshape(nwin,Nfft//2)
-    ncorr = np.zeros(shape=Nfft,dtype=np.complex64)
-    ncorr[:Nfft//2] = np.mean(corr,axis=0)
-    ncorr[-(Nfft//2)+1:]=np.flip(np.conj(ncorr[1:(Nfft//2)]),axis=0)
-    ncorr[0]=complex(0,0)
-    ncorr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(ncorr, Nfft, axis=0)))
-
-    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
-    ind   = np.where(np.abs(tcorr) <= maxlag)[0]
-    ncorr = ncorr[ind]
-    tcorr = tcorr[ind]
-    
-    return ncorr,tcorr
 
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain

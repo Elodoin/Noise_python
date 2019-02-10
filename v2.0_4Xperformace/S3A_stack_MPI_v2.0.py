@@ -6,7 +6,6 @@ import time
 import noise_module
 import numpy as np
 import pandas as pd
-import itertools
 from obspy.io.sac.sactrace import SACTrace
 import pyasdf
 from mpi4py import MPI
@@ -70,7 +69,7 @@ for ii in range(rank,splits+size-extra,size):
         #-------just loop through each day-----
         for iday in range(len(ccfs)):
             if flag:
-                print("work on source %s receiver %s at day %f" % (source, receiver,ccfs[iday]))
+                print("work on source %s receiver %s at day %s" % (source, receiver,ccfs[iday]))
 
             #-----a flag to find comp info for S+R------
             if iday==0:
@@ -136,13 +135,13 @@ for ii in range(rank,splits+size-extra,size):
             for icompS in range(len(compS)):
                 for icompR in range(len(compR)):
                     if nflag[icompS*3+icompR] >0:
-                        if flag:
-                            print("writing to %s" % temp)
                         temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
                         filename = os.path.join(STACKDIR,source,temp)
                         sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
                             delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
                         sac.write(filename,byteorder='big')
+                        if flag:
+                            print("wrote to %s" % temp)
 
 t1=time.time()
 print('S3 takes '+str(t1-t0)+' s')
