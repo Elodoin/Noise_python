@@ -323,7 +323,7 @@ def get_station_pairs(sta):
     pairs=[]
     for ii in range(len(sta)-1):
         for jj in range(ii+1,len(sta)):
-            pairs.appen((sta[ii],sta[jj]))
+            pairs.append((sta[ii],sta[jj]))
     return pairs
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):

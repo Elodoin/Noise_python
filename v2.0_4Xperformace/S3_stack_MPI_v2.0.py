@@ -23,7 +23,7 @@ CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK'
 
-flag = False
+flag = True
 maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
@@ -132,17 +132,17 @@ for ii in range(rank,splits+size-extra,size):
                                 if flag:
                                     print("stacked for day %s" % rfile)
     
-        #------------------save two stacked traces into SAC files-----------------
-        for icompS in range(len(compS)):
-            for icompR in range(len(compR)):
-                if nflag[icompS*3+icompR] >0:
-                    if flag:
-                        print("writing to %s" % temp)
-                    temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
-                    filename = os.path.join(STACKDIR,source,temp)
-                    sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
-                        delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
-                    sac.write(filename,byteorder='big')
+            #------------------save two stacked traces into SAC files-----------------
+            for icompS in range(len(compS)):
+                for icompR in range(len(compR)):
+                    if nflag[icompS*3+icompR] >0:
+                        if flag:
+                            print("writing to %s" % temp)
+                        temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
+                        filename = os.path.join(STACKDIR,source,temp)
+                        sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
+                            delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
+                        sac.write(filename,byteorder='big')
 
 t1=time.time()
 print('S3 takes '+str(t1-t0)+' s')
