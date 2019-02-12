@@ -349,7 +349,7 @@ def get_coda_window(dist,vmin,maxlag,wcoda):
     the travel time of the balistic wave
     '''
     tbeg=dist/vmin
-    tend=tmax+wcoda
+    tend=tbeg+wcoda
     if tend>maxlag:
         tend=maxlag
     return tbeg,tend    

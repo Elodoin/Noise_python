@@ -33,7 +33,7 @@ ttt0=time.time()
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_opt'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
 
 #-----some control parameters------
 flag=False              #output intermediate variables and computing times
@@ -72,7 +72,7 @@ for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
         iday = day[ii]
-        sta  = list(locs.iloc[:]['station'])
+        sta  = sorted(locs.iloc[:]['station'])
 
         t10 = time.time()
         #------loop I of each source-----

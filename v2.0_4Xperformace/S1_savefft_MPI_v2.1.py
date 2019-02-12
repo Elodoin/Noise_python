@@ -248,7 +248,7 @@ for ista in range (rank,splits+size-extra,size):
                     crap[:,:Nfft//2]=source_white[:,:Nfft//2]
                     fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
-                del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params, inv1            
+                del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params            
 
             del tfiles
         t11=time.time()
