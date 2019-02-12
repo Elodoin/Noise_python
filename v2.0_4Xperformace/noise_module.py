@@ -611,6 +611,14 @@ def cross_corr_parameters(source, receiver, start_end_t, source_params,
     parameters.update(receiver)
     return parameters    
 
+def C3_process(SS_data,SR_data):
+    '''
+    performs all C3 processes including 1) cutting the time window for P-N parts;
+    2) doing FFT for the two time-seris; 3) performing cross-correlations in freq;
+    4) ifft to time domain
+    '''
+    
+
 def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):
     '''
     Optimized version of the correlation functions: put the smoothed 

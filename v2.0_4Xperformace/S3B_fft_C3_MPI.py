@@ -23,7 +23,7 @@ CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 C3DIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
 
-flag  = False
+flag  = True
 vmin  = 1.5
 wcoda = 500
 maxlag = 800
@@ -62,7 +62,10 @@ for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
         dayfile = daily_ccfs[ii]
+        if flag:
+            print('work on day %f' % dayfile)
         sta  = list(locs.iloc[:]['station'])
+        tt   = np.arange(-maxlag/dt+1, maxlag/dt)*dt
 
         with pyasdf.ASDFDataSet(dayfile,mpi=False,mode='r') as ds:
             data_types = ds.auxiliary_data.list()
@@ -71,6 +74,9 @@ for ii in range(rank,splits+size-extra,size):
 
                 #----source and receiver information----
                 source,receiver = pairs[ii][0],pairs[ii][1]
+                if flag:
+                    print('doing C3 for %dth station pair: %s %s' % (ii,source,receiver))
+
                 indx1 = sta.index(source)
                 slat = locs.iloc[indx1]['latitude']
                 slon = locs.iloc[indx1]['longitude']
@@ -89,9 +95,14 @@ for ii in range(rank,splits+size-extra,size):
                 else:
                     compR = comp1[2]
 
+                if flag:
+                    print('found all information for station pair! We only do vertical component for now')
+
                 #----calculate window for cutting the ccfs-----
                 dist = noise_module.get_distance(slon,slat,rlon,rlat)
                 t1,t2 = noise_module.get_coda_window(dist,vmin,maxlag,wcoda)
+                if flag:
+                    print('interstation distance %f and time window at [%f %f]' %(dist,t1,t2))
 
                 for ista in sta:
                     indx = sta.index(ista)
@@ -107,15 +118,35 @@ for ii in range(rank,splits+size-extra,size):
                     
                     #---------loop through the components-----------
                     for icomp in range(len(comp)):
+                        if flag:
+                            print('virtural source %s at component %s' % (ista,comp[icomp]))
 
                         #-----find the index of the data_type and path------
                         if indx > indx1:
-                            data_indx = indx*3+icomp
+                            dtype_indx = indx*3+icomp
                             path_indx1 = indx1*3-indx*3-1+icomp
                             path_indx2 = indx2*3-indx*3-1+icomp
-                            paths = ds.auxiliary_data[data_types[data_indx]].list()
+                            paths = ds.auxiliary_data[data_types[dtype_indx]].list()
 
-                            SS_data = ds.auxiliary_data[data_types[data_indx]][paths[path_indx1]].data[:]
-                            SR_data = ds.auxiliary_data[data_types[data_indx]][paths[path_indx2]].data[:]
+                            SS_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx1]].data[:]
+                            SR_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx2]].data[:]
+                        
                         elif indx > indx2:
-   
+                            dtype_indx = indx*3+icomp
+                            path_indx1 = indx1*3-indx*3-1+icomp
+                            path_indx2 = indx2*3-indx*3-1+icomp
+                            paths = ds.auxiliary_data[data_types[dtype_indx]].list()
+
+                            SS_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx1]].data[:]
+                            SR_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx2]].data[:]
+                        else:
+                            dtype_indx = indx*3+icomp
+                            path_indx1 = indx1*3-indx*3-1+icomp
+                            path_indx2 = indx2*3-indx*3-1+icomp
+                            paths = ds.auxiliary_data[data_types[dtype_indx]].list()
+
+                            SS_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx1]].data[:]
+                            SR_data = ds.auxiliary_data[data_types[dtype_indx]][paths[path_indx2]].data[:]   
+
+                        #--------begin FFT-------
+                        cc=noise_module.C3_process(SS_data,SR_data)
