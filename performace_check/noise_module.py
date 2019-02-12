@@ -293,7 +293,7 @@ def get_event_list(str1,str2):
                 b2=13
             elif year==y2:
                 b1=1
-                b2=m2+1
+                b2=m2
             else:
                 b1=1
                 b2=13
@@ -348,11 +348,11 @@ def get_coda_window(dist,vmin,maxlag,wcoda):
     calculate the coda wave window for the ccfs based on
     the travel time of the balistic wave
     '''
-    tbeg=dist/vmin
+    tmax=dist/vmin
     tend=tmax+wcoda
     if tend>maxlag:
         tend=maxlag
-    return tbeg,tend    
+    return tmax,tend    
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
@@ -1466,23 +1466,6 @@ def cross_corr_parameters(source,receiver,num_corr,locs,maxlag):
     
     return parameters
 
-
-def stats_to_dict(stats,stat_type):
-    """
-
-    Converts obspy.core.trace.Stats object to dict
-
-    :type stats: `~obspy.core.trace.Stats` object.
-    :type source: str
-    :param source: 'source' or 'receiver'
-    """
-    stat_dict = {'{}_network'.format(stat_type):stats['network'],
-                 '{}_station'.format(stat_type):stats['station'],
-                 '{}_channel'.format(stat_type):stats['channel'],
-                 '{}_delta'.format(stat_type):stats['delta'],
-                 '{}_npts'.format(stat_type):stats['npts'],
-                 '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
-    return stat_dict 
 
 def fft_parameters(dt,cc_len,source,source_times, source_params,locs,component,Nfft,Nt):
     """ 

@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import pyasdf
+import numpy as np
 import pandas as pd
 import noise_module
 from mpi4py import MPI
@@ -24,11 +25,12 @@ C3DIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
 
 flag  = False
 vmin  = 1.5
-vmax  = 3
 wcoda = 500
 maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
+comp1 = ['EHE','EHN','EHZ']
+comp2 = ['HNE','HNN','HNU']
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -43,12 +45,15 @@ if rank == 0:
 
     #-----other variables to share-----
     locs = pd.read_csv(locations)
+    sta  = locs.iloc[:]['station']
+    pairs= noise_module.get_station_pairs(sta)
     daily_ccfs = glob.glob(os.path.join(C3DIR,'*.h5'))
     splits = len(daily_ccfs)
 else:
-    locs,daily_ccfs,splits=[None for _ in range(4)]
+    locs,pairs,daily_ccfs,splits=[None for _ in range(4)]
 
 locs   = comm.bcast(locs,root=0)
+pairs  = comm.bcase(pairs,root=0)
 daily_ccfs   = comm.bcast(daily_ccfs,root=0)
 splits = comm.bcast(splits,root=0)
 extra  = splits % size
@@ -62,30 +67,55 @@ for ii in range(rank,splits+size-extra,size):
         with pyasdf.ASDFDataSet(dayfile,mpi=False,mode='r') as ds:
             data_types = ds.auxiliary_data.list()
 
-            #-----loop through each station pair-----
-            for ii in range(len(sta)-1):
-                for jj in range(ii+1,len(sta)):
+            for ii in range(len(pairs)):
 
-                    #----source and receiver information----
-                    source = sta[ii]
-                    receiver = sta[jj]
-                    indx = sta.index(source)
-                    slat = locs.iloc[indx]['latitude']
-                    slon = locs.iloc[indx]['longitude']
-                    netS = locs.iloc[indx]['network']
-                    indx = sta.index(receiver)
-                    rlat = locs.iloc[indx]['latitude']
-                    rlon = locs.iloc[indx]['longitude']
-                    netR = locs.iloc[indx]['network']
+                #----source and receiver information----
+                source,receiver = pairs[ii][0],pairs[ii][1]
+                indx1 = sta.index(source)
+                slat = locs.iloc[indx1]['latitude']
+                slon = locs.iloc[indx1]['longitude']
+                netS = locs.iloc[indx1]['network']
+                if netS == 'E' or netS == 'OK':
+                    compS = comp2[2]
+                else:
+                    compS = comp1[2]
 
-                    #----calculate window for cutting the ccfs-----
+                indx2 = sta.index(receiver)
+                rlat = locs.iloc[indx2]['latitude']
+                rlon = locs.iloc[indx2]['longitude']
+                netR = locs.iloc[indx2]['network']
+                if netR == 'E' or netR == 'OK':
+                    compR = comp2[2]
+                else:
+                    compR = comp1[2]
 
-                    #------construct the data_type and path lists for X-A, and X-B ccfs-----
+                #----calculate window for cutting the ccfs-----
+                dist = noise_module.get_distance(slon,slat,rlon,rlat)
+                t1,t2 = noise_module.get_coda_window(dist,vmin,maxlag,wcoda)
 
-                    #---------a for loop through all 4 lag windonw--------
+                for ista in sta:
+                    indx = sta.index(ista)
+                    net = locs.iloc[indx]['network']
+                    if indx == indx1 or indx == indx2:
+                        continue
+                    
+                    #------ready to find the ccfs between ista and (S,R)-----
+                    if net == 'E' or net == 'OK':
+                        comp = comp2
+                    else:
+                        comp = comp1
+                    
+                    #---------loop through the components-----------
+                    for icomp in range(len(comp)):
 
+                        #-----find the index of the data_type and path------
+                        if indx > indx1:
+                            data_indx = indx*3+icomp
+                            path_indx1 = indx1*3-indx*3-1+icomp
+                            path_indx2 = indx2*3-indx*3-1+icomp
+                            paths = ds.auxiliary_data[data_types[data_indx]].list()
 
-                    #---------stacking---------
-
-
-#---------record its spectrum--------
+                            SS_data = ds.auxiliary_data[data_types[data_indx]][paths[path_indx1]].data[:]
+                            SR_data = ds.auxiliary_data[data_types[data_indx]][paths[path_indx2]].data[:]
+                        elif indx > indx2:
+   

@@ -45,11 +45,17 @@ if rank == 0:
     #-----other variables to share-----
     locs = pd.read_csv(locations)
     sta  = list(locs.iloc[:]['station'])
+
+    for ista in sta:
+        if not os.path.exists(os.path.join(STACKDIR,ista)):
+            os.mkdir(os.path.join(STACKDIR,ista))
+
+    #-------make station pairs based on list--------        
     pairs= noise_module.get_station_pairs(sta)
     ccfs = glob.glob(os.path.join(CCFDIR,'*.h5'))
     splits = len(pairs)
 else:
-    locs,sta,ccfs,splits=[None for _ in range(4)]
+    locs,pairs,ccfs,splits=[None for _ in range(4)]
 
 locs   = comm.bcast(locs,root=0)
 pairs  = comm.bcast(pairs,root=0)
@@ -63,6 +69,7 @@ for ii in range(rank,splits+size-extra,size):
     if ii<splits:
 
         source,receiver = pairs[ii][0],pairs[ii][1]
+        sta  = list(locs.iloc[:]['station'])
         ncorr = np.zeros((9,int(2*maxlag/dt)+1),dtype=np.float32)
         nflag = np.zeros(9,dtype=np.int16)
 
@@ -73,9 +80,6 @@ for ii in range(rank,splits+size-extra,size):
 
             #-----a flag to find comp info for S+R------
             if iday==0:
-
-                if not os.path.exists(os.path.join(STACKDIR,source)):
-                    os.mkdir(os.path.join(STACKDIR,source))
 
                 #----source information-----
                 indx = sta.index(source)
@@ -131,17 +135,17 @@ for ii in range(rank,splits+size-extra,size):
                                 if flag:
                                     print("stacked for day %s" % rfile)
     
-            #------------------save two stacked traces into SAC files-----------------
-            for icompS in range(len(compS)):
-                for icompR in range(len(compR)):
-                    if nflag[icompS*3+icompR] >0:
-                        temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
-                        filename = os.path.join(STACKDIR,source,temp)
-                        sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
-                            delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
-                        sac.write(filename,byteorder='big')
-                        if flag:
-                            print("wrote to %s" % temp)
+        #------------------save two stacked traces into SAC files-----------------
+        for icompS in range(len(compS)):
+            for icompR in range(len(compR)):
+                if nflag[icompS*3+icompR] >0:
+                    temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
+                    filename = os.path.join(STACKDIR,source,temp)
+                    sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
+                        delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
+                    sac.write(filename,byteorder='big')
+                    if flag:
+                        print("wrote to %s" % temp)
 
 t1=time.time()
 print('S3 takes '+str(t1-t0)+' s')

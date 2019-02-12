@@ -57,23 +57,22 @@ size = comm.Get_size()
 #-------form a station pair to loop through-------
 if rank ==0:
     locs = pd.read_csv(locations)
-    sta  = list(locs.iloc[:]['station'])
     day = noise_module.get_event_list(start_date,end_date)
     splits = len(day)
 else:
-    splits,locs,sta,day = [None for _ in range(4)]
+    splits,locs,day = [None for _ in range(3)]
 
 #------split the common variables------
 splits = comm.bcast(splits,root=0)
 day    = comm.bcast(day,root=0)
 locs   = comm.bcast(locs,root=0)
-sta    = comm.bcast(sta,root=0)
 extra  = splits % size
 
 for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
         iday = day[ii]
+        sta  = list(locs.iloc[:]['station'])
 
         t10 = time.time()
         #------loop I of each source-----
