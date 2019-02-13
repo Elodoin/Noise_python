@@ -341,7 +341,7 @@ def get_distance(lon1,lat1,lon2,lat2):
     a = math.sin(dphi/2)**2 + \
         math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     
-    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/100
 
 def get_coda_window(dist,vmin,maxlag,wcoda):
     '''
@@ -352,6 +352,8 @@ def get_coda_window(dist,vmin,maxlag,wcoda):
     tend=tbeg+wcoda
     if tend>maxlag:
         tend=maxlag
+    if tbeg>maxlag:
+        raise ValueError('time window starts later than maxlag')
     return tbeg,tend    
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):
@@ -611,12 +613,39 @@ def cross_corr_parameters(source, receiver, start_end_t, source_params,
     parameters.update(receiver)
     return parameters    
 
-def C3_process(SS_data,SR_data):
+def C3_process(SS_data,SR_data,Nfft,t1,t2,taxis):
     '''
     performs all C3 processes including 1) cutting the time window for P-N parts;
     2) doing FFT for the two time-seris; 3) performing cross-correlations in freq;
     4) ifft to time domain
     '''
+    #-----initialize the spectrum variables----
+    ccp1 = np.zeros(Nfft,dtype=np.complex64)
+    ccn1 = ccp1
+    ccp2 = ccp1
+    ccn2 = ccp1
+    ccp  = ccp1
+    ccn  = ccp1
+
+    #----find the index for postive and negative range------
+    ind1  = np.where(taxis <= t2 and taxis >= t1)[0]
+    ind2  = np.where(taxis >= -t2 and taxis <= -t1)[0]
+    SS_data_P = SS_data[ind1]
+    SS_data_N = SS_data[ind2]
+    SR_data_P = SR_data[ind1]
+    SR_data_N = SR_data[ind2]
+
+    #---------------do FFT-------------
+    ccp1 = scipy.fftpack.fft(SS_data_P, Nfft)
+    ccn1 = scipy.fftpack.fft(SS_data_N, Nfft)
+    ccp2 = scipy.fftpack.fft(SR_data_P, Nfft)
+    ccn2 = scipy.fftpack.fft(SR_data_N, Nfft)
+
+    #------cross correlations--------
+    ccp = np.conj(ccp1)*ccp2
+    ccn = np.conj(ccn1)*ccn2
+
+    return ccp,ccn
     
 
 def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):

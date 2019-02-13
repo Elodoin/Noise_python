@@ -30,16 +30,16 @@ t00=time.time()
 #event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_opt'
-event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
+locations = '/Users/chengxin/Documents/Harvard/Kanto/data/locations.txt'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto/data/FFT'
+event = '/Users/chengxin/Documents/Harvard/code_develop/Julia/SeisJul/julia_noise_shared/data_test/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum_20Hz'
 
 #-----some control parameters------
 prepro=False                #preprocess the data?
 to_whiten=False             #whiten the spectrum?
 time_norm=False             #normalize in time?
-rm_resp_spectrum=True       #remove response using spectrum?
+rm_resp_spectrum=False       #remove response using spectrum?
 rm_resp_inv=False           #remove response using inventory
 flag=False                  #print intermediate variables and computing time
 
@@ -156,7 +156,7 @@ for ista in range (rank,splits+size-extra,size):
                 nptsS = []
                 source_slice = obspy.Stream()
 
-                #--------breaken a continous recording into pieces----------
+                #--------break a continous recording into pieces----------
                 t0=time.time()
                 for ii,win in enumerate(source.slide(window_length=cc_len, step=step)):
                     win.detrend(type="constant")

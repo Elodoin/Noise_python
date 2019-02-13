@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import noise_module
 from mpi4py import MPI
+from scipy.fftpack.helper import next_fast_len
 
 '''
 this scripts takes the ASDF file outputed by script S2 (cc function for day x)
@@ -19,9 +20,9 @@ t0=time.time()
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
-CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-C3DIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
+CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto/data/CCF'
+locations = '/Users/chengxin/Documents/Harvard/Kanto/data/locations.txt'
+C3DIR = '/Users/chengxin/Documents/Harvard/Kanto/data/CCF_C3'
 
 flag  = True
 vmin  = 1.5
@@ -59,29 +60,34 @@ daily_ccfs   = comm.bcast(daily_ccfs,root=0)
 splits = comm.bcast(splits,root=0)
 extra  = splits % size
 
+#--------MPI loop through each day---------
 for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
+        t00=time.time()
+
         dayfile = daily_ccfs[ii]
         if flag:
             print('work on day %s' % dayfile)
         sta  = sorted(locs.iloc[:]['station'])
         tt   = np.arange(-maxlag/dt+1, maxlag/dt)*dt
 
+        #------------dayfile contains everything needed----------
         with pyasdf.ASDFDataSet(dayfile,mpi=False,mode='r') as ds:
             data_types = ds.auxiliary_data.list()
 
+            #-----loop each station pair-----
             for ii in range(len(pairs)):
-
-                #----source and receiver information----
                 source,receiver = pairs[ii][0],pairs[ii][1]
                 if flag:
                     print('doing C3 for %dth station pair: %s %s' % (ii,source,receiver))
 
+                #----load source + receiver information----
                 indx1 = sta.index(source)
                 slat = locs.iloc[indx1]['latitude']
                 slon = locs.iloc[indx1]['longitude']
                 netS = locs.iloc[indx1]['network']
+                #-------only deal with vertical------
                 if netS == 'E' or netS == 'OK':
                     compS = comp2[2]
                 else:
@@ -105,16 +111,23 @@ for ii in range(rank,splits+size-extra,size):
                 if flag:
                     print('interstation distance %f and time window of [%f %f]' %(dist,t1,t2))
 
+                #-----------initialize some variables-----------
+                Nfft  = int(next_fast_len(int(2*abs(t2-t1)/dt+1)))
+                npair = 0
+                cc_P = np.zeros(Nfft,dtype=np.complex64)
+                cc_N = cc_P
+                cc_final = cc_P
+
+                #------loop through all virtual sources------
                 for ista in sta:
                     indx = sta.index(ista)
                     net = locs.iloc[indx]['network']
                     if indx == indx1 or indx == indx2:
                         continue
-                    
                     if flag:
                         print('virtural source %s' % ista)
                     
-                    #------ready to find the ccfs between ista and (S,R)-----
+                    #------use all components of virtual source-----
                     if net == 'E' or net == 'OK':
                         comp = comp2
                     else:
@@ -143,7 +156,7 @@ for ii in range(rank,splits+size-extra,size):
                             dtype_indx1 = indx1*3+2
                             dtype_indx2 = indx*3+icomp
                             path_indx1 = (indx-indx1-1)*3+icomp
-                            path_indx2 = (indx2-indx-1)*3+icomp
+                            path_indx2 = (indx2-indx-1)*3+2
                             paths1 = ds.auxiliary_data[data_types[dtype_indx1]].list()
                             paths2 = ds.auxiliary_data[data_types[dtype_indx2]].list()
 
@@ -169,5 +182,34 @@ for ii in range(rank,splits+size-extra,size):
                             print('dtype1 %s path1 %s' % (data_types[dtype_indx1],paths1[path_indx1]))
                             print('dtype2 %s path2 %s' % (data_types[dtype_indx2],paths2[path_indx2]))
 
-                        #--------begin FFT-------
-                        #cc=noise_module.C3_process(SS_data,SR_data)
+                        #--------cast all processing into C3-process function-------
+                        ccp,ccn=noise_module.C3_process(SS_data,SR_data,Nfft,t1,t2,tt)
+                        cc_P+=ccp
+                        cc_N+=ccn
+                        npair+=1
+
+                #-------stack contribution from all virtual source------
+                cc_P = cc_P/npair
+                cc_N = cc_N/npair
+                cc_final = 0.5*cc_P + 0.5*cc_N
+                cc_final = np.real(scipy.fftpack.ifft(cc_final, Nfft)
+
+                #------ready to write into HDF5 files-------
+                c3_h5 = dayfile
+                crap   = np.zeros(cc_final.shape)
+
+                if not os.path.isfile(c3_h5):
+                    with pyasdf.ASDFDataSet(c3_h5,mpi=False,mode='w') as ds:
+                        pass 
+
+                with pyasdf.ASDFDataSet(c3_h5,mpi=False,mode='a') as ccf_ds:
+                    parameters = {'dt':dt, 'maxlag':maxlag, 'wcoda':wcoda, 'vmin':vmin}
+
+                    #------save the time domain cross-correlation functions-----
+                    path = '_'.join([netR,receiver,compS])
+                    new_data_type = netS+'s'+source+'s'+compR
+                    crap = cc_final
+                    ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
+
+            t10=time.time()
+            print('one station takes %f s to compute' % (t10-t0))
