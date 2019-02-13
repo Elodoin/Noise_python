@@ -30,9 +30,9 @@ t00=time.time()
 #event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-locations = '/Users/chengxin/Documents/Harvard/Kanto/data/locations.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto/data/FFT'
-event = '/Users/chengxin/Documents/Harvard/code_develop/Julia/SeisJul/julia_noise_shared/data_test/noise_data/Event_2010_???'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
+event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum_20Hz'
 
 #-----some control parameters------

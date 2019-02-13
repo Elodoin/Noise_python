@@ -351,7 +351,7 @@ def get_coda_window(dist,vmin,maxlag,wcoda):
     tbeg=dist/vmin
     tend=tbeg+wcoda
     if tend>maxlag:
-        tend=maxlag
+        raise ValueError('time window ends at maxlag, too short!')
     if tbeg>maxlag:
         raise ValueError('time window starts later than maxlag')
     return tbeg,tend    
