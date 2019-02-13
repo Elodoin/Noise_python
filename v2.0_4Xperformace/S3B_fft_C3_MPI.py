@@ -192,11 +192,11 @@ for ii in range(rank,splits+size-extra,size):
                 cc_P = cc_P/npair
                 cc_N = cc_N/npair
                 cc_final = 0.5*cc_P + 0.5*cc_N
-                cc_final = np.real(scipy.fftpack.ifft(cc_final, Nfft)
+                cc_final = np.real(scipy.fftpack.ifft(cc_final, Nfft))
 
                 #------ready to write into HDF5 files-------
                 c3_h5 = dayfile
-                crap   = np.zeros(cc_final.shape)
+                crap  = np.zeros(cc_final.shape)
 
                 if not os.path.isfile(c3_h5):
                     with pyasdf.ASDFDataSet(c3_h5,mpi=False,mode='w') as ds:
