@@ -642,8 +642,12 @@ def C3_process(SS_data,SR_data,Nfft,t1,t2,taxis):
     ccn2 = scipy.fftpack.fft(SR_data_N, Nfft)
 
     #------cross correlations--------
-    ccp = np.conj(ccp1)*ccp2
-    ccn = np.conj(ccn1)*ccn2
+    #ccp = np.conj(ccp1)*ccp2
+    #ccn = np.conj(ccn1)*ccn2
+    ccp[:Nfft//2] = np.conj(ccp1[:Nfft//2])*ccp2[:Nfft//2]
+    ccp[-Nfft//2+1:] = np.flip(np.conj(ccp[1:Nfft//2]))
+    ccn[:Nfft//2] = np.conj(ccn1[:Nfft//2])*ccn2[:Nfft//2]
+    ccn[-Nfft//2+1:] = np.flip(np.conj(ccn[1:Nfft//2]))
 
     return ccp,ccn
     

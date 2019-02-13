@@ -1,6 +1,7 @@
 import os
 import glob
 import time
+import scipy
 import pyasdf
 import numpy as np
 import pandas as pd
@@ -21,8 +22,8 @@ t0=time.time()
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto/data/CCF'
-locations = '/Users/chengxin/Documents/Harvard/Kanto/data/locations.txt'
 C3DIR = '/Users/chengxin/Documents/Harvard/Kanto/data/CCF_C3'
+locations = '/Users/chengxin/Documents/Harvard/Kanto/data/locations.txt'
 
 flag  = True
 vmin  = 1.5
@@ -47,7 +48,6 @@ if rank == 0:
     #-----other variables to share-----
     locs = pd.read_csv(locations)
     sta  = sorted(locs.iloc[:]['station'])
-    print(sta)
     pairs= noise_module.get_station_pairs(sta)
     daily_ccfs = glob.glob(os.path.join(CCFDIR,'*.h5'))
     splits = len(daily_ccfs)
@@ -65,16 +65,18 @@ for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
         t00=time.time()
-
         dayfile = daily_ccfs[ii]
-        if flag:
-            print('work on day %s' % dayfile)
         sta  = sorted(locs.iloc[:]['station'])
         tt   = np.arange(-maxlag/dt+1, maxlag/dt)*dt
+        if flag:
+            print('work on day %s' % dayfile)
 
         #------------dayfile contains everything needed----------
         with pyasdf.ASDFDataSet(dayfile,mpi=False,mode='r') as ds:
             data_types = ds.auxiliary_data.list()
+
+            #-------try to load everything here to avoid repeating read HDF5 file------
+            # cc_array = np.zeros()
 
             #-----loop each station pair-----
             for ii in range(len(pairs)):
@@ -106,13 +108,13 @@ for ii in range(rank,splits+size-extra,size):
                     print('infor read for the station pair! Only do Z component now')
 
                 #----calculate window for cutting the ccfs-----
-                dist = noise_module.get_distance(slon,slat,rlon,rlat)
+                dist  = noise_module.get_distance(slon,slat,rlon,rlat)
                 t1,t2 = noise_module.get_coda_window(dist,vmin,maxlag,wcoda)
                 if flag:
                     print('interstation distance %f and time window of [%f %f]' %(dist,t1,t2))
 
                 #-----------initialize some variables-----------
-                Nfft  = int(next_fast_len(int(2*abs(t2-t1)/dt+1)))
+                Nfft  = int(next_fast_len(int(abs(t2-t1)/dt+1)))
                 npair = 0
                 cc_P = np.zeros(Nfft,dtype=np.complex64)
                 cc_N = cc_P
@@ -187,12 +189,17 @@ for ii in range(rank,splits+size-extra,size):
                         cc_P+=ccp
                         cc_N+=ccn
                         npair+=1
+                    
+                    if flag:
+                        print('moving to next virtual source')
 
                 #-------stack contribution from all virtual source------
                 cc_P = cc_P/npair
                 cc_N = cc_N/npair
                 cc_final = 0.5*cc_P + 0.5*cc_N
                 cc_final = np.real(scipy.fftpack.ifft(cc_final, Nfft))
+                if flag:
+                    print('start to ouput to HDF5 file')
 
                 #------ready to write into HDF5 files-------
                 c3_h5 = dayfile
@@ -212,4 +219,4 @@ for ii in range(rank,splits+size-extra,size):
                     ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
 
             t10=time.time()
-            print('one station takes %f s to compute' % (t10-t0))
+            print('one station takes %f s to compute' % (t10-t00))
