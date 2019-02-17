@@ -14,7 +14,8 @@ from scipy.fftpack.helper import next_fast_len
 '''
 this scripts takes the ASDF file outputed by script S2 (cc function for day x)
 and get the spectrum of the coda part of the cc and store them in a
-new HDF5 files for computing C3 functions in script S4
+new HDF5 files for later stacking purpose in script S4
+-Chengxin Jiang (Feb.15.2019)
 '''
 
 #----------some common variables here----------
@@ -82,7 +83,7 @@ for ii in range(rank,splits+size-extra,size):
             ccfs_size  = 2*int(maxlag*downsamp_freq)+1
             memory_size = npairs*4*ccfs_size/1024/1024/1024
             if memory_size > 20:
-                raise MemoryError('Memory exceeds 10 GB! No enough memory to load them all once!')
+                raise MemoryError('Memory exceeds 20 GB! No enough memory to load them all once!')
 
             #------cc_array holds all ccfs and npairs tracks the number of pairs for each source-----
             if flag:
@@ -123,6 +124,10 @@ for ii in range(rank,splits+size-extra,size):
                 if flag:
                     print('doing C3 for %dth station pair: [%s %s]' % (ii,sta1,sta2))
 
+                #----------------------------------------------------------------
+                #------this condition can be easily modified if you want to -----
+                #----------other components of the C3 function as well-----------
+                #----------------------------------------------------------------
                 if sta1[-1] != 'Z' or sta2[-1] != 'Z':
                     print('Only do Z component here!!!')
                     continue
@@ -138,6 +143,7 @@ for ii in range(rank,splits+size-extra,size):
                     t01=time.time()
                     virtualS = all_list[indx]
 
+                    #---------condition when virtual source is either station 1 or station 2-----------
                     if virtualS.split('s')[1] == sta1.split('s')[1] or virtualS.split('s')[1] == sta2.split('s')[1]:
                         print('Moving to next virtual source!')
                         continue
@@ -187,7 +193,7 @@ for ii in range(rank,splits+size-extra,size):
                     t02=time.time()
                     print('a virtual source takes %f s to compute' %(t02-t01))
 
-                #-------stack contribution from all virtual source------
+                #-------stack the contribution from all virtual sources------
                 cc_P = cc_P/tpairs
                 cc_N = cc_N/tpairs
                 cc_final = 0.5*cc_P + 0.5*cc_N
