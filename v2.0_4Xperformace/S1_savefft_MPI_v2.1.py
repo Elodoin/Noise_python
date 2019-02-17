@@ -82,10 +82,9 @@ for ista in range (rank,splits+size-extra,size):
         t10=time.time()
         #----loop through each day on each core----
         for jj in range (len(tdir)):
-            station = locs.iloc[ista]['station']
-            network = locs.iloc[ista]['network']
+            station = locs.iloc[ista]['netstation']
             if flag:
-                print("working on station %s at network %s" % (station,network))
+                print("working on station %s " % station)
             
             #---------think about reading mini-seed files here---------
             tfiles = glob.glob(os.path.join(tdir[jj],'*'+station+'*.sac'))
@@ -227,7 +226,7 @@ for ista in range (rank,splits+size-extra,size):
 
                 #-------------save FFTs as HDF5 files-----------------
                 crap=np.zeros(shape=(N,Nfft//2),dtype=np.complex64)
-                fft_h5 = os.path.join(FFTDIR,network+"."+station+'.h5')
+                fft_h5 = os.path.join(FFTDIR,station+'.h5')
 
                 if not os.path.isfile(fft_h5):
                     with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:

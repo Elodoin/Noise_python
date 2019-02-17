@@ -341,20 +341,34 @@ def get_distance(lon1,lat1,lon2,lat2):
     a = math.sin(dphi/2)**2 + \
         math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
     
-    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/100
+    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/1000
 
-def get_coda_window(dist,vmin,maxlag,wcoda):
+def get_coda_window(dist,vmin,maxlag,dt,wcoda):
     '''
     calculate the coda wave window for the ccfs based on
-    the travel time of the balistic wave
+    the travel time of the balistic wave and select the 
+    index for the time window
     '''
-    tbeg=dist/vmin
+    #--------construct time axis----------
+    tt = np.arange(-maxlag/dt, maxlag/dt+1)*dt
+
+    #--get time window--
+    tbeg=int(dist/vmin)
     tend=tbeg+wcoda
     if tend>maxlag:
         raise ValueError('time window ends at maxlag, too short!')
     if tbeg>maxlag:
         raise ValueError('time window starts later than maxlag')
-    return tbeg,tend    
+    
+    #----convert to point index----
+    ind1 = np.where(abs(tt)==tbeg)[0]
+    ind2 = np.where(abs(tt)==tend)[0]
+
+    if len(ind1)!=2 or len(ind2)!=2:
+        raise ValueError('index for time axis is wrong')
+    ind = [ind2[0],ind1[0],ind1[1],ind2[1]]
+
+    return ind    
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
@@ -613,7 +627,7 @@ def cross_corr_parameters(source, receiver, start_end_t, source_params,
     parameters.update(receiver)
     return parameters    
 
-def C3_process(SS_data,SR_data,Nfft,t1,t2,taxis):
+def C3_process(S1_data,S2_data,Nfft,win1,win2):
     '''
     performs all C3 processes including 1) cutting the time window for P-N parts;
     2) doing FFT for the two time-seris; 3) performing cross-correlations in freq;
@@ -627,30 +641,34 @@ def C3_process(SS_data,SR_data,Nfft,t1,t2,taxis):
     ccp  = ccp1
     ccn  = ccp1
 
-    #----find the index for postive and negative range------
-    ind1  = np.where(taxis <= t2 and taxis >= t1)[0]
-    ind2  = np.where(taxis >= -t2 and taxis <= -t1)[0]
-    SS_data_P = SS_data[ind1]
-    SS_data_N = SS_data[ind2]
-    SR_data_P = SR_data[ind1]
-    SR_data_N = SR_data[ind2]
+    #------find the time window for sta1------
+    S1_data_N = S1_data[win1[0]:win1[1]]
+    S1_data_P = S1_data[win1[2]:win1[3]]
+    S2_data_N = S2_data[win2[0]:win2[1]]
+    S2_data_P = S2_data[win2[2]:win2[3]]
 
     #---------------do FFT-------------
-    ccp1 = scipy.fftpack.fft(SS_data_P, Nfft)
-    ccn1 = scipy.fftpack.fft(SS_data_N, Nfft)
-    ccp2 = scipy.fftpack.fft(SR_data_P, Nfft)
-    ccn2 = scipy.fftpack.fft(SR_data_N, Nfft)
+    ccp1 = scipy.fftpack.fft(S1_data_P, Nfft)
+    ccn1 = scipy.fftpack.fft(S1_data_N, Nfft)
+    ccp2 = scipy.fftpack.fft(S2_data_P, Nfft)
+    ccn2 = scipy.fftpack.fft(S2_data_N, Nfft)
 
     #------cross correlations--------
-    #ccp = np.conj(ccp1)*ccp2
-    #ccn = np.conj(ccn1)*ccn2
-    ccp[:Nfft//2] = np.conj(ccp1[:Nfft//2])*ccp2[:Nfft//2]
-    ccp[-Nfft//2+1:] = np.flip(np.conj(ccp[1:Nfft//2]))
-    ccn[:Nfft//2] = np.conj(ccn1[:Nfft//2])*ccn2[:Nfft//2]
-    ccn[-Nfft//2+1:] = np.flip(np.conj(ccn[1:Nfft//2]))
+    ccp = np.conj(ccp1)*ccp2
+    ccn = np.conj(ccn1)*ccn2
 
     return ccp,ccn
     
+def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
+    '''
+    provide the parameters for computting CC later
+    '''
+    dist = get_distance(lonS,latS,lonR,latR)
+    parameters = {'dt':dt,
+        'dist':dist,
+        'lag':maxlag,
+        'method':method}
+    return parameters
 
 def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):
     '''
@@ -1020,19 +1038,6 @@ def norm(arr):
     arr -= arr.mean(axis=1, keepdims=True)
     return (arr.T / arr.std(axis=-1)).T
 
-
-def clean_up(corr, sampling_rate, freqmin, freqmax):
-    if corr.ndim == 2:
-        axis = 1
-    else:
-        axis = 0
-    corr = scipy.signal.detrend(corr, axis=axis, type='constant')
-    corr = scipy.signal.detrend(corr, axis=axis, type='linear')
-    percent = np.min([sampling_rate * 20 / corr.shape[axis],0.05])
-    taper = scipy.signal.tukey(corr.shape[axis], percent)
-    corr *= taper
-    corr = bandpass(corr, freqmin, freqmax, sampling_rate, zerophase=True)
-    return corr
 
 def stretch_mat_creation(refcc, str_range=0.01, nstr=1001):
     """ Matrix of stretched instance of a reference trace.
@@ -1441,71 +1446,6 @@ def getGaps(stream, min_gap=None, max_gap=None):
     # Set the original traces to not alter the stream object.
     stream.traces = copied_traces
     return gap_list		
-
-
-def cross_corr_parameters(source,receiver,num_corr,locs,maxlag):
-    """ 
-    Creates parameter dict for cross-correlations and header info to ASDF.  
-
-    :type source: `~obspy.core.trace.Stats` object.
-    :param source: Stats header from xcorr source station
-    :type receiver: `~obspy.core.trace.Stats` object.
-    :param receiver: Stats header from xcorr receiver station
-    :type num_corr: int
-    :param num_corr: number of cross-correlation functions in stack
-    :type locs: dict
-    :param locs: dict with latitude, elevation_in_m, and longitude of all stations
-    :type maxlag: int
-    :param maxlag: number of lag points in cross-correlation (sample points) 
-    :return: Auxiliary data parameter dict
-    :rtype: dict
-
-    """
-
-    # source and receiver locations in dict with lat, elevation_in_m, and lon
-    source_loc = locs[source.network + '.' + source.station]
-    receiver_loc = locs[receiver.network + '.' + receiver.station]
-
-    # get distance (in km), azimuth and back azimuth
-    dist,azi,baz = calc_distance(source_loc,receiver_loc)	
-
-    # stack duration is end time of stack - start time of stack
-    stack_duration = source.endtime - source.starttime
-    
-    # fill Correlation attribDict 
-    parameters = {
-            'source':str(source.station), 
-            'source_net':str(source.network),
-            'receiver':str(receiver.station),
-            'receiver_net':str(receiver.network),
-            'comp':source.channel[-1] + receiver.channel[-1],
-            'sampling_rate':source.sampling_rate,
-            'ccf_windows':num_corr,
-            'stack_duration':stack_duration,
-            'start_year':source.starttime.year,
-            'start_month':source.starttime.month,
-            'start_day':source.starttime.day,
-            'start_hour':source.starttime.hour,
-            'start_minute':source.starttime.minute,
-            'start_second':source.starttime.second,
-            'start_microsecond':source.starttime.microsecond,
-            'end_year':source.endtime.year,
-            'end_month':source.endtime.month,
-            'end_day':source.endtime.day,
-            'end_hour':source.endtime.hour,
-            'end_minute':source.endtime.minute,
-            'end_second':source.endtime.second,
-            'end_microsecond':source.endtime.microsecond,
-            'source_lon':source_loc['longitude'],
-            'source_lat':source_loc['latitude'],
-            'receiver_lon':receiver_loc['longitude'],
-            'receiver_lat':receiver_loc['latitude'],
-            'dist':dist,
-            'azi':azi,
-            'baz':baz,
-            'lag':maxlag}
-    
-    return parameters
 
 
 def stats_to_dict(stats,stat_type):
