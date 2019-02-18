@@ -2,10 +2,8 @@ import os
 import sys
 import glob
 from datetime import datetime
-
 import numpy as np
 import scipy
-from scipy.fftpack.helper import next_fast_len
 import obspy
 import matplotlib.pyplot as plt
 import noise_module
@@ -13,9 +11,7 @@ import time
 import pyasdf
 import pandas as pd
 import itertools
-from obspy.clients.fdsn import Client
 from obspy.io.sac.sactrace import SACTrace
-
 from mpi4py import MPI
 
 
@@ -24,8 +20,14 @@ this script reads from the h5 file for each station (containing all pre-processe
 computes the cross-correlations between each station-pair at an overlapping time window.
 
 this version is implemented with MPI (Nov.09.2018)
+
+this optimized version runs 5 times faster than the previous one by 1) pulling the prcess of making smoothed spectrum
+of the source outside of the receiver loop, 2) take advantage the linear relationship of ifft to average the spectrum
+first before doing ifft in cross-correlaiton functions and 3) sacrifice the disk memory (by 1.5 times) to improve the 
+I/O speed (by 4 times)  (Jan,20,2019)
 '''
 
+ttt=time.time()
 #------some useful absolute paths-------
 #FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT'
 #STACKDIR = '/n/flashlfs/mdenolle/KANTO/DATA/STACK'
@@ -34,10 +36,10 @@ this version is implemented with MPI (Nov.09.2018)
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 #CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
 
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_with_whiten'
+FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT_with_resp_no_whiten_no_taper'
 CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_with_resp_with_whiten'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK_with_resp_no_whiten_no_taper'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
 tcomp  = ['EHZ','EHE','EHN','HNU','HNE','HNN']
 
 
@@ -51,8 +53,8 @@ freqmax=4
 cc_len=3600
 step=1800
 maxlag=800
-#method='deconv'
-method='raw'
+method='deconv'
+#method='raw'
 #method='coherence'
 
 #---------MPI-----------
@@ -83,13 +85,15 @@ extra  = splits % size
 for ii in range(rank,splits+size-extra,size):
 
     if ii<splits:
+        t10=time.time()
         source,receiver = pairs[ii][0],pairs[ii][1]
         print('source '+source.split('/')[-1]+' receiver '+receiver.split('/')[-1]+' rank '+str(rank))
 
+        t0=time.time()
         fft_h5   = source
-        fft_ds_s = pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r',compression=None)
+        fft_ds_s = pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r')
         fft_h5   = receiver
-        fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r',compression=None)
+        fft_ds_r = pyasdf.ASDFDataSet(fft_h5, mpi=False, mode='r')
         
         #-------get source information------
         net_sta_s = fft_ds_s.waveforms.list()[0]
@@ -111,14 +115,17 @@ for ii in range(rank,splits+size-extra,size):
         rlon  = locs.iloc[tindx]['longitude']
         path_list_r = fft_ds_r.auxiliary_data[data_type].list()
 
-        #---------initialize index and stacking arrays for saving sac files---------
+        #---------initialize index and stacking arrays to save sac files---------
         indx = np.zeros(shape=(len(tcomp),len(tcomp)),dtype=np.int16)       # indx contains the comp information for each station pair
         tlen = int((2*maxlag)/dt+1)
         ncorr = np.zeros(shape=(indx.size,tlen),dtype=np.float32)
+
+        t1=time.time()
+        print('prepare S+R %6.4fs' % (t1-t0))
         
         #---------loop through each component of the source------
         for jj in range(len(path_list_s)):
-
+            t2=time.time()
             paths = path_list_s[jj]
             compS = fft_ds_s.auxiliary_data[data_type][paths].parameters['component']
 
@@ -126,12 +133,15 @@ for ii in range(rank,splits+size-extra,size):
             Nfft = fft_ds_s.auxiliary_data[data_type][paths].parameters['nfft']
             Nseg = fft_ds_s.auxiliary_data[data_type][paths].parameters['nseg']
             
-            dataS_t = []
-            t0=time.time()
             fft1= fft_ds_s.auxiliary_data[data_type][paths].data[:,:Nfft//2] 
-            t1=time.time()
-            print('readsing takes '+str(t1-t0))
             source_std = fft_ds_s.auxiliary_data[data_type][paths].parameters['std']
+
+            tt0=time.time()
+            #-----get smoothed spectrum of source for decon-type cross correlations----
+            sfft1 = noise_module.moving_ave(np.abs(fft1.reshape(fft1.size,)),10)
+            sfft1 = sfft1.reshape(Nseg,Nfft//2)
+            t3=time.time()
+            print('smooth spec %6.4fs' % (t3-tt0))
 
             #-------day information------
             tday  = paths[-10:]
@@ -143,39 +153,41 @@ for ii in range(rank,splits+size-extra,size):
                 #-------if it exists-------        
                 if tpath in path_list_r:
                     pathr = tpath
-                    print(str(pathr))
-                    dataR_t = []        
+                    #print(str(pathr))
+    
+                    t4=time.time()
                     fft2= fft_ds_r.auxiliary_data[data_type][pathr].data[:,:Nfft//2]
                     receiver_std = fft_ds_r.auxiliary_data[data_type][pathr].parameters['std']
+                    t5=time.time()
 
                     #---------- check the existence of earthquakes ----------
                     rec_ind = np.where(receiver_std < 10)[0]
                     sou_ind = np.where(source_std < 10)[0]
 
                     #-----note that Hi-net has a few mi-secs differences to Mesonet in terms starting time-----
-                    #bb,indx1,indx2=np.intersect1d(dataS_t[sou_ind],dataR_t[rec_ind],return_indices=True)
-
                     bb,indx1,indx2=np.intersect1d(sou_ind,rec_ind,return_indices=True)
                     indx1=sou_ind[indx1]
                     indx2=rec_ind[indx2]
                     if (len(indx1)==0) | (len(indx2)==0):
                         continue
 
+                    t6=time.time()
                     #-----------do daily cross-correlations now-----------
-                    #corr,tcorr=noise_module.fcorrelate(fft1[indx1,:Nfft//2-1],fft2[indx2,:Nfft//2-1],np.round(maxlag),dt,Nfft,method)
-                    corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2],fft2[indx2,:Nfft//2],np.round(maxlag),dt,Nfft,method)
+                    #corr,tcorr=noise_module.correlate(fft1[indx1,:Nfft//2],fft2[indx2,:Nfft//2],np.round(maxlag),dt,Nfft,method)
+                    corr,tcorr=noise_module.optimized_correlate(fft1[indx1,:Nfft//2],fft2[indx2,:Nfft//2],\
+                            sfft1[indx1,:Nfft//2],np.round(maxlag),dt,Nfft,method)
+                    t7=time.time()
+                    print('read S %6.4fs, R %6.4fs, cc %6.4fs' % ((t3-t2),(t5-t4),(t7-t6)))
+
                     #--------find the index to store data--------
                     indx[tcomp.index(compS)][tcomp.index(compR)]=1
                     nindx=tcomp.index(compS)*len(tcomp)+tcomp.index(compR)
 
                     #--------linear stackings---------
                     if corr.ndim==2:
-                        for kk in range(corr.shape[0]):
-                            corr[kk,:]=corr[kk,:]/max(corr[kk,:])
                         y = np.mean(corr,axis=0)
-                        #y2 = noise_module.butter_pass(y,freqmin,freqmax,dt,2)
                     elif corr.ndim==1:
-                        y = corr/max(corr)
+                        y = corr
                     else:
                         continue
                     ncorr[nindx][:] = ncorr[nindx][:] + y
@@ -238,6 +250,12 @@ for ii in range(rank,splits+size-extra,size):
 
         #del pcorr
         del fft_ds_s, fft_ds_r, path_list_r, path_list_s, fft1, fft2, source_std, receiver_std, ncorr
+
+        t11 = time.time()
+        print('it takes '+str(t11-t10)+' s to process a station pair in step 2')
+
+ttt1=time.time()
+print('cc takes '+str(ttt1-ttt)+' s')
 
 comm.barrier()
 if rank == 0:

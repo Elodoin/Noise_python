@@ -1,6 +1,6 @@
 import os
 import glob
-import itertools
+import math
 from datetime import datetime
 import copy
 import time
@@ -19,13 +19,13 @@ import pyasdf
 import pandas as pd
 from obspy import read_inventory
 from obspy.core import AttribDict
+from obspy.signal.util import _npts2nfft
 from obspy.signal.invsim import cosine_taper
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site
 from obspy.clients.nrl import NRL
 
 
-def stats2inv(stats,resp=None,filexml=None):
-   
+def stats2inv(stats,resp=None,filexml=None,locs=None):
 
     # We'll first create all the various objects. These strongly follow the
     # hierarchy of StationXML files.
@@ -35,38 +35,73 @@ def stats2inv(stats,resp=None,filexml=None):
         # The source should be the id whoever create the file.
         source="japan_from_resp")
 
-    net = Network(
-        # This is the network code according to the SEED standard.
-        code=stats.network,
-        # A list of stations. We'll add one later.
-        stations=[],
-        description="Marine created from SAC and resp files",
-        # Start-and end dates are optional.
-        start_date=stats.starttime)
+    if locs is None:
+        net = Network(
+            # This is the network code according to the SEED standard.
+            code=stats.network,
+            # A list of stations. We'll add one later.
+            stations=[],
+            description="Marine created from SAC and resp files",
+            # Start-and end dates are optional.
+            start_date=stats.starttime)
 
-    sta = Station(
-        # This is the station code according to the SEED standard.
-        code=stats.station,
-        latitude=stats.sac["stla"],
-        longitude=stats.sac["stlo"],
-        elevation=stats.sac["stel"],
-        creation_date=stats.starttime,
-        site=Site(name="First station"))
+        sta = Station(
+            # This is the station code according to the SEED standard.
+            code=stats.station,
+            latitude=stats.sac["stla"],
+            longitude=stats.sac["stlo"],
+            elevation=stats.sac["stel"],
+            creation_date=stats.starttime,
+            site=Site(name="First station"))
 
-    cha = Channel(
-        # This is the channel code according to the SEED standard.
-        code=stats.channel,
-        # This is the location code according to the SEED standard.
-        location_code=stats.location,
-        # Note that these coordinates can differ from the station coordinates.
-        latitude=stats.sac["stla"],
-        longitude=stats.sac["stlo"],
-        elevation=stats.sac["stel"],
-        depth=-stats.sac["stel"],
-        azimuth=stats.sac["cmpaz"],
-        dip=stats.sac["cmpinc"],
-        sample_rate=stats.sampling_rate)
-    
+        cha = Channel(
+            # This is the channel code according to the SEED standard.
+            code=stats.channel,
+            # This is the location code according to the SEED standard.
+            location_code=stats.location,
+            # Note that these coordinates can differ from the station coordinates.
+            latitude=stats.sac["stla"],
+            longitude=stats.sac["stlo"],
+            elevation=stats.sac["stel"],
+            depth=-stats.sac["stel"],
+            azimuth=stats.sac["cmpaz"],
+            dip=stats.sac["cmpinc"],
+            sample_rate=stats.sampling_rate)
+
+    else:
+        ista=locs[locs['station']==stats.station].index.values.astype('int64')[0]
+
+        net = Network(
+            # This is the network code according to the SEED standard.
+            code=locs.iloc[ista]["network"],
+            # A list of stations. We'll add one later.
+            stations=[],
+            description="Marine created from SAC and resp files",
+            # Start-and end dates are optional.
+            start_date=stats.starttime)
+
+        sta = Station(
+            # This is the station code according to the SEED standard.
+            code=locs.iloc[ista]["station"],
+            latitude=locs.iloc[ista]["latitude"],
+            longitude=locs.iloc[ista]["longitude"],
+            elevation=locs.iloc[ista]["elevation"],
+            creation_date=stats.starttime,
+            site=Site(name="First station"))
+        cha = Channel(
+            # This is the channel code according to the SEED standard.
+            code=stats.channel,
+            # This is the location code according to the SEED standard.
+            location_code=stats.location,
+            # Note that these coordinates can differ from the station coordinates.
+            latitude=locs.iloc[ista]["latitude"],
+            longitude=locs.iloc[ista]["longitude"],
+            elevation=locs.iloc[ista]["elevation"],
+            depth=-locs.iloc[ista]["elevation"],
+            azimuth=0,
+            dip=0,
+            sample_rate=stats.sampling_rate)
+
     response = obspy.core.inventory.response.Response()
     if resp is not None:
         print('i dont have the response')
@@ -114,18 +149,17 @@ def process_raw(st,downsamp_freq):
         - removes instrument response (pole-zero)
     """
 
-    day = 86400   # numbe of seconds in a day
+    #day = 86400   # numbe of seconds in a day
     if len(st) > 100:
         raise ValueError('Too many traces in Stream')
     st = check_sample(st)
 
     # check for traces with only zeros
     for tr in st:
-        if tr.data.max() == 0:
+        if all(data == 0 for data in tr.data):
             st.remove(tr)
     if len(st) == 0:
         raise ValueError('No traces in Stream')
-
     # for tr in st:
     #   tr.data = tr.data.astype(np.float)
     st = downsample(st,downsamp_freq) 
@@ -157,10 +191,184 @@ def process_raw(st,downsamp_freq):
         tr = check_and_phase_shift(tr)    
         if tr.data.dtype != 'float64':
             tr.data = tr.data.astype(np.float64)
-    
+
     #st.merge(method=1,fille_value=0.)[0]
 
     return st
+
+def resp_spectrum(source,resp_dir,downsamp_freq,sta):
+    '''
+    remove the instrument response with response spectrum from evalresp.
+    the response spectrum is evaluated based on RESP/PZ files and then 
+    inverted using obspy function of invert_spectrum. they are stored as
+    nyc file in directory of resp_dir. 
+    '''
+    #---------do the downsampling here--------
+    if downsamp_freq != source.stats.sampling_rate:
+        source = downsample(source,downsamp_freq)
+    
+    dt=1/source.stats.sampling_rate
+
+    #-----load the instrument response nyc file-----
+    resp_file = os.path.join(resp_dir,'resp.'+sta+'.npy')
+    if not os.path.isfile(resp_file):
+        print("no instrument response for "+sta)
+        return
+
+    respz = np.load(resp_file)
+
+    #----------do fft now----------
+    nfft = _npts2nfft(source.stats.npts)
+    source_spect = np.fft.rfft(source.data,n=nfft)
+
+    fy = 1 / (dt * 2.0)
+    freq = np.linspace(0, fy, nfft // 2 + 1)
+
+    #-----apply a cosine taper to target freq-----
+    source_spect *=respz
+    source.data = np.fft.irfft(source_spect)[0:source.stats.npts]
+    return source
+
+def get_event_list(str1,str2):
+    '''
+    return the event list in the formate of 2010_01_01, as used
+    in the path variables of the ASDF files for each station
+    
+    y1: integer, the starting year
+    m1: integer, the starting month
+    y2: integer, the ending year
+    m2; integer, the ending month
+    '''
+
+    event = []
+    date1=str1.split('_')
+    date2=str2.split('_')
+    y1=int(date1[0])
+    m1=int(date1[1])
+    d1=int(date1[2])
+    y2=int(date2[0])
+    m2=int(date2[1])
+    d2=int(date2[2])
+
+    #----same year----
+    if y1==y2:
+        year=y1
+        #---same month----
+        if m1==m2:
+            month=m1
+            for iday in range(d1,d2+1):
+                temp = str('%04d_%02d_%02d' % (year,month,iday))
+                event.append(temp)
+        #----different months-----
+        else:
+            for jj in range(m1,m2+1):
+                month = jj
+
+                if jj==1 or jj==3 or jj==5 or jj==7 or jj==9 or jj==10 or jj==12:
+                    days = 31
+                elif jj==2:
+                    if (year == 4*(year//4)):
+                        days=29
+                    else:
+                        days = 28
+                else:
+                    days = 30
+                
+                if jj==m1:
+                    b1,b2=d1,days
+                elif jj==m2:
+                    b1,b2=1,d2
+                else:
+                    b1,b2=1,days
+                
+                for iday in range(b1,b2):
+                    temp = str('%04d_%02d_%02d' % (year,month,iday))
+                    event.append(temp)
+    else:
+        for year in range(y1,y2+1):
+            
+            #----define the bounds for months----
+            if year==y1:
+                b1=m1
+                b2=13
+            elif year==y2:
+                b1=1
+                b2=m2+1
+            else:
+                b1=1
+                b2=13
+
+            for jj in range(b1,b2):
+                month = jj
+
+                if jj==1 or jj==3 or jj==5 or jj==7 or jj==9 or jj==10 or jj==12:
+                    days = 31
+                elif jj==2:
+                    if (year == 4*(year//4)):
+                        days=29
+                    else:
+                        days = 28
+                else:
+                    days = 30
+                
+                for iday in range(1,days+1):
+                    temp = str('%04d_%02d_%02d' % (year,month,iday))
+                    event.append(temp)
+    return event
+
+def get_station_pairs(sta):
+    '''
+    construct station pairs based on the station list
+    works same way as the function of itertools
+    '''
+    pairs=[]
+    for ii in range(len(sta)-1):
+        for jj in range(ii+1,len(sta)):
+            pairs.append((sta[ii],sta[jj]))
+    return pairs
+
+@jit(float32(float32,float32,float32,float32)) 
+def get_distance(lon1,lat1,lon2,lat2):
+    '''
+    calculate distance between two points on earth
+    '''
+    R = 6372800  # Earth radius in meters
+    
+    phi1, phi2 = math.radians(lat1), math.radians(lat2) 
+    dphi       = math.radians(lat2 - lat1)
+    dlambda    = math.radians(lon2 - lon1)
+    
+    a = math.sin(dphi/2)**2 + \
+        math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    
+    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/1000
+
+def get_coda_window(dist,vmin,maxlag,dt,wcoda):
+    '''
+    calculate the coda wave window for the ccfs based on
+    the travel time of the balistic wave and select the 
+    index for the time window
+    '''
+    #--------construct time axis----------
+    tt = np.arange(-maxlag/dt, maxlag/dt+1)*dt
+
+    #--get time window--
+    tbeg=int(dist/vmin)
+    tend=tbeg+wcoda
+    if tend>maxlag:
+        raise ValueError('time window ends at maxlag, too short!')
+    if tbeg>maxlag:
+        raise ValueError('time window starts later than maxlag')
+    
+    #----convert to point index----
+    ind1 = np.where(abs(tt)==tbeg)[0]
+    ind2 = np.where(abs(tt)==tend)[0]
+
+    if len(ind1)!=2 or len(ind2)!=2:
+        raise ValueError('index for time axis is wrong')
+    ind = [ind2[0],ind1[0],ind1[1],ind2[1]]
+
+    return ind    
 
 def clean_up(corr,sampling_rate,freqmin,freqmax):
     if corr.ndim == 2:
@@ -341,28 +549,6 @@ def whiten(data, delta, freqmin, freqmax,Nfft=None):
 
     return FFTRawSign
 
-def nearest_step(t1,t2,step):
-    step_min = step / 60
-    if t1 == t2:
-        return t1,t2
-
-    day1,hour1,minute1,second1 = t1.day,t1.hour,t1.minute,t1.second
-    day2,hour2,minute2,second2 = t2.day,t2.hour,t2.minute,t2.second
-
-    start1 = obspy.UTCDateTime(t1.year,t1.month,t1.day)
-    start2 = obspy.UTCDateTime(t2.year,t2.month,t2.day)
-
-    t1s = np.array([start1 + s for s in range(0,86400+step,step)])
-    t2s = np.array([start2 + s for s in range(0,86400+step,step)])
-    t1diff = [t - t1 for t in t1s]
-    t2diff = [t - t2 for t in t2s]
-    ind1 = np.argmin(np.abs(t1diff))
-    ind2 = np.argmin(np.abs(t2diff))
-    t1 = t1s[ind1]
-    t2 = t2s[ind2]
-
-    return t1,t2
-
 def filter_dist(pairs,locs,min_dist,max_dist):
     """
 
@@ -439,26 +625,54 @@ def cross_corr_parameters(source, receiver, start_end_t, source_params,
             'endtime':endtime}
     parameters.update(source)
     parameters.update(receiver)
-    return parameters   
+    return parameters    
 
-def stats_to_dict(stats,stat_type):
-    """
+def C3_process(S1_data,S2_data,Nfft,win):
+    '''
+    performs all C3 processes including 1) cutting the time window for P-N parts;
+    2) doing FFT for the two time-seris; 3) performing cross-correlations in freq;
+    4) ifft to time domain
+    '''
+    #-----initialize the spectrum variables----
+    ccp1 = np.zeros(Nfft,dtype=np.complex64)
+    ccn1 = ccp1
+    ccp2 = ccp1
+    ccn2 = ccp1
+    ccp  = ccp1
+    ccn  = ccp1
 
-    Converts obspy.core.trace.Stats object to dict
+    #------find the time window for sta1------
+    S1_data_N = S1_data[win[0]:win[1]]
+    S1_data_N = S1_data_N[::-1]
+    S1_data_P = S1_data[win[2]:win[3]]
+    S2_data_N = S2_data[win[0]:win[1]]
+    S2_data_N = S2_data_N[::-1]
+    S2_data_P = S2_data[win[2]:win[3]]
 
-    :type stats: `~obspy.core.trace.Stats` object.
-    :type source: str
-    :param source: 'source' or 'receiver'
-    """
-    stat_dict = {'{}_network'.format(stat_type):stats['network'],
-                 '{}_station'.format(stat_type):stats['station'],
-                 '{}_channel'.format(stat_type):stats['channel'],
-                 '{}_delta'.format(stat_type):stats['delta'],
-                 '{}_npts'.format(stat_type):stats['npts'],
-                 '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
-    return stat_dict            
+    #---------------do FFT-------------
+    ccp1 = scipy.fftpack.fft(S1_data_P, Nfft)
+    ccn1 = scipy.fftpack.fft(S1_data_N, Nfft)
+    ccp2 = scipy.fftpack.fft(S2_data_P, Nfft)
+    ccn2 = scipy.fftpack.fft(S2_data_N, Nfft)
 
-def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross-correlation"):
+    #------cross correlations--------
+    ccp = np.conj(ccp1)*ccp2
+    ccn = np.conj(ccn1)*ccn2
+
+    return ccp,ccn
+    
+def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
+    '''
+    provide the parameters for computting CC later
+    '''
+    dist = get_distance(lonS,latS,lonR,latR)
+    parameters = {'dt':dt,
+        'dist':dist,
+        'lag':maxlag,
+        'method':method}
+    return parameters
+
+def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cross-correlation"):
     '''
     Optimized version of the correlation functions: put the smoothed 
     source spectrum amplitude out of the inner for loop. 
@@ -466,29 +680,16 @@ def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross
     stacking in spectrum first to reduce the total number of times for ifft,
     which is the most time consuming steps in the previous correlate function  
     '''
-    #t0=time.time()
-    if fft1.ndim == 1:
-        nwin=1
-    elif fft1.ndim == 2:
-        nwin= int(fft1.shape[0])
 
     #------convert all 2D arrays into 1D to speed up--------
     corr = np.zeros(nwin*(Nfft//2),dtype=np.complex64)
-    corr = np.conj(fft1.reshape(fft1.size,)) * fft2.reshape(fft2.size,)
-    fft1_smoothed_abs = fft1_smoothed_abs.reshape(fft1_smoothed_abs.size,)
+    corr = fft1_smoothed_abs.reshape(fft1_smoothed_abs.size,) * fft2.reshape(fft2.size,)
 
-    if method == 'deconv':
-        #ind = np.where(fft1_smoothed_abs>0)
-        #corr[ind] /= moving_ave(np.abs(tmp[ind]),10)**2
-        corr /= fft1_smoothed_abs**2
-    elif method == 'coherence':
-        corr /= fft1_smoothed_abs
-        fft2_smoothed_abs = moving_ave(np.abs(fft2),10)
-        corr /= fft2_smoothed_abs
-    elif method == 'raw':
-        ind = 1
+    if method == "coherence":
+        temp = moving_ave(np.abs(fft2.reshape(fft2.size,)),10)
+        corr /= temp
 
-    corr = corr.reshape(nwin,Nfft//2)
+    corr  = corr.reshape(nwin,Nfft//2)
     ncorr = np.zeros(shape=Nfft,dtype=np.complex64)
     ncorr[:Nfft//2] = np.mean(corr,axis=0)
     ncorr[-(Nfft//2)+1:]=np.flip(np.conj(ncorr[1:(Nfft//2)]),axis=0)
@@ -498,10 +699,8 @@ def optimized_correlate(fft1,fft2,fft1_smoothed_abs,maxlag,dt,Nfft,method="cross
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
     ind   = np.where(np.abs(tcorr) <= maxlag)[0]
     ncorr = ncorr[ind]
-    tcorr = tcorr[ind]
-    #t1=time.time()
-    #print('optimized takes '+str(t1-t0))
-    return ncorr,tcorr
+    
+    return ncorr
 
 def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
     """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
@@ -841,19 +1040,6 @@ def norm(arr):
     arr -= arr.mean(axis=1, keepdims=True)
     return (arr.T / arr.std(axis=-1)).T
 
-
-def clean_up(corr, sampling_rate, freqmin, freqmax):
-    if corr.ndim == 2:
-        axis = 1
-    else:
-        axis = 0
-    corr = scipy.signal.detrend(corr, axis=axis, type='constant')
-    corr = scipy.signal.detrend(corr, axis=axis, type='linear')
-    percent = np.min([sampling_rate * 20 / corr.shape[axis],0.05])
-    taper = scipy.signal.tukey(corr.shape[axis], percent)
-    corr *= taper
-    corr = bandpass(corr, freqmin, freqmax, sampling_rate, zerophase=True)
-    return corr
 
 def stretch_mat_creation(refcc, str_range=0.01, nstr=1001):
     """ Matrix of stretched instance of a reference trace.
@@ -1264,70 +1450,22 @@ def getGaps(stream, min_gap=None, max_gap=None):
     return gap_list		
 
 
-def cross_corr_parameters(source,receiver,num_corr,locs,maxlag):
-    """ 
-    Creates parameter dict for cross-correlations and header info to ASDF.  
-
-    :type source: `~obspy.core.trace.Stats` object.
-    :param source: Stats header from xcorr source station
-    :type receiver: `~obspy.core.trace.Stats` object.
-    :param receiver: Stats header from xcorr receiver station
-    :type num_corr: int
-    :param num_corr: number of cross-correlation functions in stack
-    :type locs: dict
-    :param locs: dict with latitude, elevation_in_m, and longitude of all stations
-    :type maxlag: int
-    :param maxlag: number of lag points in cross-correlation (sample points) 
-    :return: Auxiliary data parameter dict
-    :rtype: dict
-
+def stats_to_dict(stats,stat_type):
     """
 
-    # source and receiver locations in dict with lat, elevation_in_m, and lon
-    source_loc = locs[source.network + '.' + source.station]
-    receiver_loc = locs[receiver.network + '.' + receiver.station]
+    Converts obspy.core.trace.Stats object to dict
 
-    # get distance (in km), azimuth and back azimuth
-    dist,azi,baz = calc_distance(source_loc,receiver_loc)	
-
-    # stack duration is end time of stack - start time of stack
-    stack_duration = source.endtime - source.starttime
-    
-    # fill Correlation attribDict 
-    parameters = {
-            'source':str(source.station), 
-            'source_net':str(source.network),
-            'receiver':str(receiver.station),
-            'receiver_net':str(receiver.network),
-            'comp':source.channel[-1] + receiver.channel[-1],
-            'sampling_rate':source.sampling_rate,
-            'ccf_windows':num_corr,
-            'stack_duration':stack_duration,
-            'start_year':source.starttime.year,
-            'start_month':source.starttime.month,
-            'start_day':source.starttime.day,
-            'start_hour':source.starttime.hour,
-            'start_minute':source.starttime.minute,
-            'start_second':source.starttime.second,
-            'start_microsecond':source.starttime.microsecond,
-            'end_year':source.endtime.year,
-            'end_month':source.endtime.month,
-            'end_day':source.endtime.day,
-            'end_hour':source.endtime.hour,
-            'end_minute':source.endtime.minute,
-            'end_second':source.endtime.second,
-            'end_microsecond':source.endtime.microsecond,
-            'source_lon':source_loc['longitude'],
-            'source_lat':source_loc['latitude'],
-            'receiver_lon':receiver_loc['longitude'],
-            'receiver_lat':receiver_loc['latitude'],
-            'dist':dist,
-            'azi':azi,
-            'baz':baz,
-            'lag':maxlag}
-    
-    return parameters
-
+    :type stats: `~obspy.core.trace.Stats` object.
+    :type source: str
+    :param source: 'source' or 'receiver'
+    """
+    stat_dict = {'{}_network'.format(stat_type):stats['network'],
+                 '{}_station'.format(stat_type):stats['station'],
+                 '{}_channel'.format(stat_type):stats['channel'],
+                 '{}_delta'.format(stat_type):stats['delta'],
+                 '{}_npts'.format(stat_type):stats['npts'],
+                 '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
+    return stat_dict 
 
 def fft_parameters(dt,cc_len,source,source_times, source_params,locs,component,Nfft,Nt):
     """ 
@@ -1532,50 +1670,6 @@ def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):
 		denoised_img = wiener(img_to_denoise,Ntau,np.mean(temp))
 
 	return denoised_img
-
-
-def fortran_correlate(fft1, fft2, maxlag, dt, Nfft, method="cross-correlation"):
-    if fft1.ndim == 1:
-        axis = 0
-        nwin=1
-    elif fft1.ndim == 2:
-        axis = 1
-        nwin= int(fft1.shape[0])
-
-    t0=time.time()
-    corr=np.zeros(shape=(nwin,Nfft//2-1),dtype=np.complex64)
-    corr[:,:Nfft//2-1]  = np.conj(fft1) * fft2
-    #corr=dsp_fortran.correlate_decon(fft1,fft2,nwin,Nfft//2-1)
-
-    if method == 'deconv':
-        ind = np.where(np.abs(fft1)>0 )
-        smt = np.zeros(shape=(len(ind[0]),),dtype=np.float32)
-        smt=dsp_fortran.smooth_abs_mean(np.abs(fft1[ind]),int(len(ind[0])))
-        corr[ind] /= smt**2
-        t1=time.time()
-    elif method == 'coherence':
-        ind = np.where(np.abs(fft1)>0 )
-        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
-        ind = np.where(np.abs(fft2)>0 )
-        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
-    elif method == 'raw':
-        ind = 1
-    
-    corr[:,-(Nfft // 2)+1:] = np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis) # fill in the complex conjugate
-    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
-    t2=time.time()
-
-    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
-    ind = np.where(np.abs(tcorr) <= maxlag)[0]
-    if axis == 1:
-        corr = corr[:,ind]
-    else:
-        corr = corr[ind]
-    tcorr=tcorr[ind]
-    t3=time.time()
-
-    print('it takes '+str(t1-t0)+' s '+str(t2-t1)+' s '+str(t3-t2)+' s')
-    return corr,tcorr    
 
 if __name__ == "__main__":
     pass
