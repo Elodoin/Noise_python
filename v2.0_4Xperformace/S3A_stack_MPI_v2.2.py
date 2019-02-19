@@ -18,12 +18,12 @@ t0=time.time()
 #STACKDIR = '/n/regal/denolle_lab/cjiang/STACK'
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
-CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_opt'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
+CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
 STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK'
 
-flag = True
-maxlag = 800
+flag = False
+maxlag = 1800
 downsamp_freq=20
 dt=1/downsamp_freq
 comp1 = ['EHE','EHN','EHZ']
@@ -113,7 +113,7 @@ for ii in range(rank,splits+size-extra,size):
                 for icompS in range(len(compS)):
                     sfile = netS+'s'+source+'s'+compS[icompS]
                     if flag:
-                        print("work on source component %s" % compS[icompS])
+                        print("work on source %s" % sfile)
                     
                     if sfile in data_types:
                         indxS = data_types.index(sfile)
@@ -121,10 +121,10 @@ for ii in range(rank,splits+size-extra,size):
                         path_list = ds.auxiliary_data[dtype].list()
 
                         for icompR in range(len(compR)):
-                            rfile = netR+'_'+receiver+'_'+compR[icompR]
+                            rfile = netR+'s'+receiver+'s'+compR[icompR]
 
                             if flag:
-                                print("work on receiver component %s" % compR[icompR])
+                                print("work on receiver %s" % rfile)
                             
                             if rfile in path_list:
                                 indxR = path_list.index(rfile)

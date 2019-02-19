@@ -47,8 +47,8 @@ cc_len=3600
 step=1800
 maxlag=1800
 method='deconv'
-start_date = '2010_01_11'
-end_date   = '2010_01_12'
+start_date = '2010_01_01'
+end_date   = '2010_02_29'
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD

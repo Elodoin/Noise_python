@@ -33,12 +33,14 @@ C3DIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3'
 
 save_cc = True         #---whether to save c1 array into a numpy data-----
 flag  = False
-vmin  = 1.5
+vmin  = 1.0
 wcoda = 1000
 maxlag = 1800
 downsamp_freq=20
 dt=1/downsamp_freq
 Nfft  = int(next_fast_len(int(wcoda/dt)+1))
+tt    = np.arange(-Nfft//2, Nfft//2+1)*dt
+ind   = np.where(np.abs(tt) <= wcoda//2)[0]
 
 
 #---------MPI-----------
@@ -121,7 +123,7 @@ for ii in range(rank,splits+size-extra,size):
                 raise ValueError('the size of cc_array is not right [%d vs %d]' % (k,npairs))
 
             if save_cc:
-                np.save('cc_arrayt',cc_array)
+                np.save(dayfile,cc_array)
 
             #-----loop each station pair-----
             for ii in range(npairs):
@@ -208,18 +210,14 @@ for ii in range(rank,splits+size-extra,size):
                 cc_N = cc_N/tpairs
                 cc_final = 0.5*cc_P + 0.5*cc_N
                 cc_final = np.real(np.fft.ifftshift(scipy.fftpack.ifft(cc_final, Nfft,axis=0)))
-
-                
-                plt.plot(cc_final)
-                plt.show()
-                
+                corr = cc_final[ind]
 
                 if flag:
                     print('start to ouput to HDF5 file')
 
                 #------ready to write into HDF5 files-------
                 c3_h5 = os.path.join(C3DIR,dayfile.split('/')[-1])
-                crap  = np.zeros(cc_final.shape)
+                crap  = np.zeros(corr.shape)
 
                 if not os.path.isfile(c3_h5):
                     with pyasdf.ASDFDataSet(c3_h5,mpi=False,mode='w') as ds:
@@ -231,7 +229,7 @@ for ii in range(rank,splits+size-extra,size):
                     #------save the time domain cross-correlation functions-----
                     path = sta2
                     data_type = sta1
-                    crap = cc_final
+                    crap = corr
                     ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
                 t1=time.time()

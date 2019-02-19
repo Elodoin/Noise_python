@@ -20,7 +20,7 @@ dt: time increment
 
 c2file = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF/2010_01_11.h5'
 c3file = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF_C3/2010_01_11.h5'
-maxlag = 500
+maxlag = 1000
 c2_maxlag = 1800
 dt = 0.05
 
@@ -42,6 +42,8 @@ for ii in range(len(data_type_c3)):
     for jj in range(len(path_c3)):
         print(data_type_c3[ii],path_c3[jj])
 
+        sta1 = data_type_c3[ii].split('s')[1]
+        sta2 = path_c3[jj].split('s')[1]
         c3_waveform = ds_c3.auxiliary_data[data_type_c3[ii]][path_c3[jj]].data[:]
         c2_waveform = ds_c2.auxiliary_data[data_type_c3[ii]][path_c3[jj]].data[:]
         c1_waveform = c2_waveform[ind]
@@ -50,7 +52,7 @@ for ii in range(len(data_type_c3)):
         plt.plot(c3_waveform)
         plt.subplot(212)
         plt.plot(c1_waveform)
-        plt.legend(['c3','c2'],loc='upper right')
+        plt.legend(sta1+'_'+sta2,loc='upper right')
         plt.show()
 
 

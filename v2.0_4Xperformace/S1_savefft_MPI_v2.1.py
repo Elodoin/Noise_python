@@ -32,7 +32,7 @@ t00=time.time()
 
 locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
-event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_???'
+event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_0??'
 resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum_20Hz'
 
 #-----some control parameters------
@@ -82,7 +82,8 @@ for ista in range (rank,splits+size-extra,size):
         t10=time.time()
         #----loop through each day on each core----
         for jj in range (len(tdir)):
-            station = locs.iloc[ista]['netstation']
+            station = locs.iloc[ista]['station']
+            network = locs.iloc[ista]['network']
             if flag:
                 print("working on station %s " % station)
             
@@ -226,7 +227,7 @@ for ista in range (rank,splits+size-extra,size):
 
                 #-------------save FFTs as HDF5 files-----------------
                 crap=np.zeros(shape=(N,Nfft//2),dtype=np.complex64)
-                fft_h5 = os.path.join(FFTDIR,station+'.h5')
+                fft_h5 = os.path.join(FFTDIR,network+'.'+station+'.h5')
 
                 if not os.path.isfile(fft_h5):
                     with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:
