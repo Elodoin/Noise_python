@@ -18,8 +18,11 @@ from mpi4py import MPI
 this script pre-processs the noise data for each single station using the parameters given below 
 and stored the whitened and nomalized fft trace for each station in a HDF5 file as *.h5.
 
-this version is implemented with MPI (Nov.09.2018)
+implemented with MPI (Nov.09.2018)
 by C.Jiang, T.Clements, M.Denolle
+
+this script handles both SAC, MiniSeed formate input. Future updates will include dealing with
+ASDF file format
 '''
 
 t00=time.time()
@@ -88,7 +91,7 @@ for ista in range (rank,splits+size-extra,size):
                 print("working on station %s " % station)
             
             #---------think about reading mini-seed files here---------
-            tfiles = glob.glob(os.path.join(tdir[jj],'*'+station+'*.sac'))
+            tfiles = glob.glob(os.path.join(tdir[jj],'*'+station+'*'))
             if len(tfiles)==0:
                 print(str(station)+' does not have sac file at '+str(tdir[jj]))
                 continue
