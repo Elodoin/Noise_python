@@ -1,7 +1,7 @@
 import os
 import glob
 import math
-from datetime import datetime
+import datetime
 import copy
 import time
 import matplotlib.pyplot as plt
@@ -231,13 +231,39 @@ def resp_spectrum(source,resp_dir,downsamp_freq,sta):
 
 def get_event_list(str1,str2):
     '''
+    return the event list in the formate of 2010_01_01 by taking
+    advantage of the datetime modules
+    
+    str1: string of starting date -> 2010_01_01
+    str2: string of ending date -> 2010_10_11
+    '''
+    event = []
+    date1=str1.split('_')
+    date2=str2.split('_')
+    y1=int(date1[0])
+    m1=int(date1[1])
+    d1=int(date1[2])
+    y2=int(date2[0])
+    m2=int(date2[1])
+    d2=int(date2[2])
+    
+    d1=datetime.datetime(y1,m1,d1)
+    d2=datetime.datetime(y2,m2,d2)
+    dt=datetime.timedelta(days=1)
+
+    while(d1<=d2):
+        event.append(d1.strftime('%Y_%m_%d'))
+        d1+=dt
+    
+    return event
+
+def get_event_list_silly_version(str1,str2):
+    '''
     return the event list in the formate of 2010_01_01, as used
     in the path variables of the ASDF files for each station
     
-    y1: integer, the starting year
-    m1: integer, the starting month
-    y2: integer, the ending year
-    m2; integer, the ending month
+    str1: string of starting date -> 2010_01_01
+    str2: string of ending date -> 2010_10_11
     '''
 
     event = []
@@ -281,7 +307,7 @@ def get_event_list(str1,str2):
                 else:
                     b1,b2=1,days
                 
-                for iday in range(b1,b2):
+                for iday in range(b1,b2+1):
                     temp = str('%04d_%02d_%02d' % (year,month,iday))
                     event.append(temp)
     else:
