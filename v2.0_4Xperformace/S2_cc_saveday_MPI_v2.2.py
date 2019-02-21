@@ -36,7 +36,7 @@ ttt0=time.time()
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
 
 FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
-CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
+CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/check_again/CCF'
 
 #-----some control parameters------
 flag=False              #output intermediate variables and computing times
@@ -48,7 +48,7 @@ step=1800
 maxlag=1800
 method='deconv'
 start_date = '2010_01_01'
-end_date   = '2010_02_29'
+end_date   = '2010_01_01'
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD

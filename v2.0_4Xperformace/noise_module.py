@@ -135,7 +135,7 @@ def stats2inv(stats,resp=None,filexml=None,locs=None):
 
     return inv        
 
-def process_raw(st,downsamp_freq,resp,inv):
+def process_raw(st,downsamp_freq):
     """
     
     Pre-process month-long stream of data. 

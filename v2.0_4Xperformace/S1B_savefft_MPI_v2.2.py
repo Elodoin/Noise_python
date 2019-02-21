@@ -21,8 +21,8 @@ and stored the whitened and nomalized fft trace for each station in a HDF5 file 
 implemented with MPI (Nov.09.2018)
 by C.Jiang, T.Clements, M.Denolle
 
-this script handles both SAC, MiniSeed formate input. Future updates will include dealing with
-ASDF file format
+this script only handles SAC and MiniSeed formate inputs. If you have ASDF file, use the other
+script of S1_savASDF_v2.2
 '''
 
 t00=time.time()
@@ -33,19 +33,23 @@ t00=time.time()
 #event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-FFTDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/FFT'
-event = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/noise_data/Event_2010_0??'
-resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all/resp_spectrum_20Hz'
+rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
+FFTDIR = os.path.join(rootpath,'FFT')
+locations = os.path.join(rootpath,'locations_small.txt')
+event = os.path.join(rootpath,'noise_data/Event_2010_0??')
+#--------think about how to simplify this----------
+resp_dir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
 
-#-----some control parameters------
+#-----boolen parameters------
 prepro=False                #preprocess the data?
 to_whiten=False             #whiten the spectrum?
 time_norm=False             #normalize in time?
-rm_resp_spectrum=False       #remove response using spectrum?
+rm_resp_spectrum=False      #remove response using spectrum?
 rm_resp_inv=False           #remove response using inventory
 flag=False                  #print intermediate variables and computing time
 
+
+#----more common variables---
 pre_filt=[0.04,0.05,4,6]
 downsamp_freq=20
 dt=1/downsamp_freq
@@ -235,15 +239,13 @@ for ista in range (rank,splits+size-extra,size):
                 if not os.path.isfile(fft_h5):
                     with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:
                         pass # create pyasdf file 
-          
+        
                 with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
                     parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
                         locs.iloc[ista],comp,Nfft,N)
                     
-                    savedate = '_'.join((str(dataS_stats.starttime.year),str(dataS_stats.starttime.month), \
-                        str(dataS_stats.starttime.day)))
-                    savedate = datetime.strptime(savedate,'%Y_%m_%d')
-                    savedate = datetime.strftime(savedate,'%Y_%m_%d')
+                    savedate = '{0:04d}_{1:02d}_{2:02d}'.format(dataS_stats.starttime.year,\
+                        dataS_stats.starttime.month,dataS_stats.starttime.day)
                     path = savedate
 
                     data_type = str(comp)

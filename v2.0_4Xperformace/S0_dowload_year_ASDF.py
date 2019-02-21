@@ -4,22 +4,14 @@ and save the data into ASDF data format.
 
 author: Marine Denolle (mdenolle@fas.harvard.edu) - 11/16/18
 
-modified by Chengxin Jinag on Feb.2019 to make it flexiable for downloading 
+modified by Chengxin Jiang on Feb.2019 to make it flexiable for downloading 
 data in a range of days instead of a whole year
 """
 
 ## download modules
 import obspy
 from obspy import UTCDateTime
-from datetime import datetime
 import os, glob
-from os import mkdir
-from obspy.io import sac
-
-from obspy.geodetics import locations2degrees
-from obspy.geodetics import gps2dist_azimuth
-
-from obspy.io.xseed import Parser
 from obspy.clients.fdsn import Client
 import noise_module
 import pyasdf
@@ -39,7 +31,7 @@ sta="F05D"                                      # station to download
 remove_response=True                            # boolean to remove instrumental response
 start_date = '2012_01_01'
 end_date   = '2012_01_10'
-flag = True
+flag = False
 
 #----check whether folder exists------
 if not os.path.isdir(direc):
@@ -51,6 +43,7 @@ endtime=obspy.UTCDateTime(int(end_date[:4]),int(end_date[5:7]),int(end_date[8:])
 inv = client.get_stations(network=net, station=sta, channel=chan, location='*', \
     starttime = starttime, endtime=endtime,minlatitude=lamin, maxlatitude=lamax, \
     minlongitude=lomin, maxlongitude=lomax,level="response")
+    
 if flag:
     print(inv)
 
@@ -96,17 +89,19 @@ for K in inv:
                 try:
                     # get data
                     tr = client.get_waveforms(network=K.code, station=sta.code, channel=chan.code, location='*', \
-                        starttime = t1, endtime=t2,attach_response=True)
-                    
-                    # clean up data
-                    tr = noise_module.process_raw(tr, NewFreq, resp=remove_response, inv=sta_inv)
-
-                    # add data to H5 file
-                    tr[0].data = tr[0].data.astype(np.float32)
-                    ds.add_waveforms(tr,tag="raw_recordings")
-                    if flag:
-                        print(ds) # sanity check
+                        starttime = t1, endtime=t2, attach_response=True)
 
                 except Exception as e:
                     print(e)
-                    pass
+                    continue
+                    
+                # clean up data
+                tr = noise_module.process_raw(tr, NewFreq)
+
+                # add data to H5 file
+                tr[0].data = tr[0].data.astype(np.float32)
+                ds.add_waveforms(tr,tag="raw_recordings")
+
+                if flag:
+                    print(ds) # sanity check
+
