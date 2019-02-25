@@ -5,9 +5,8 @@ import datetime
 import copy
 import time
 import matplotlib.pyplot as plt
-from numba import jit
-import pyasdf
-import pandas as pd
+from numba import jit,float32,int16 
+
 import numpy as np
 import scipy
 from scipy.fftpack import fft,ifft,next_fast_len
@@ -16,6 +15,8 @@ from scipy.linalg import svd
 from scipy.ndimage import map_coordinates
 from obspy.signal.filter import bandpass
 import obspy
+import pyasdf
+import pandas as pd
 from obspy import read_inventory
 from obspy.core import AttribDict
 from obspy.signal.util import _npts2nfft
@@ -136,6 +137,7 @@ def stats2inv(stats,resp=None,filexml=None,locs=None):
 
 def process_raw(st,downsamp_freq):
     """
+    
     Pre-process month-long stream of data. 
     Checks:
         - sample rate is matching 
@@ -148,16 +150,18 @@ def process_raw(st,downsamp_freq):
     """
 
     #day = 86400   # numbe of seconds in a day
-    if len(st) > 100 or len(st) == 0:
-        raise ValueError('Too many or no traces in Stream')
+    if len(st) > 100:
+        raise ValueError('Too many traces in Stream')
     st = check_sample(st)
 
     # check for traces with only zeros
     for tr in st:
         if all(data == 0 for data in tr.data):
             st.remove(tr)
-
-    # downsampling the trace
+    if len(st) == 0:
+        raise ValueError('No traces in Stream')
+    # for tr in st:
+    #   tr.data = tr.data.astype(np.float)
     st = downsample(st,downsamp_freq) 
     st = remove_small_traces(st)
     if len(st) == 0:
@@ -192,192 +196,6 @@ def process_raw(st,downsamp_freq):
 
     return st
 
-def preprocess_rawdata(st,downsamp_freq,prepro=True,clean_time=True):
-    '''
-    pre-process daily stream of data from IRIS server.
-
-    pre-processing steps include:
-        - check sample rate is matching (from original process_raw)
-        - Trims data to first and last day of month, so it equals to 86400 seconds long
-        - interpolate the data and make it start at 00:00:00.000
-        - check for gaps in data and remove the ones when gaps > 30% of total length 
-        - downsamples data        (from original process_raw)
-    '''
-    
-    if prepro:
-
-        #----remove the ones with too many segments------
-        if len(st) > 50:
-            print('Too many traces in Stream: Continue!')
-            st=[]
-            return st
-
-        #----check sampling rate, trace length and make downsampling----
-        st = check_sample(st)
-        st = remove_small_traces(st)
-        st = downsample(st,downsamp_freq)
-                
-        if len(st) == 0:
-            print('No traces in Stream: Continue!')
-            return st
-
-        #-----remove mean and trend for each trace------
-        for tst in st:
-            tst.detrend(type="constant")
-            tst.detrend(type="linear") 
-
-    #-----fill gaps, trim data and interpolate to ensure all starts at 00:00:00.0------
-    if clean_time:
-        nst = clean_daily_segment(st)
-
-    return nst
-
-def remove_response(st,downsamp_freq,pre_filt,resp_dir,resp_option='inv'):
-    '''
-    remove instrument response according to the option of resp_option. 
-    option inv -> using inventory information and obspy function of remove_response;
-    option spectrum -> use downloaded response spectrum and interpolate if necessary
-    option polezeros -> use the pole zeros for a crude correction of response
-
-    st:             stream object of obspy
-    pre_filt:       filter parameters
-    downsamp_freq:  downsampling frequency
-    resp_dir:       directory of the response spectrum data. ignored when resp_option is not "spectrum"
-    resp_option:    different ways to remove the instrument response
-    '''
-
-    #-----using inventory information------
-    if resp_option == 'inv':
-
-        # check whether inventory exists so remove them directly
-        inv = 'good'
-        st.attach_response(inv)
-        st.remove_response(output="VEL",pre_filt=pre_filt)
-
-    #------based on instrument spectrum------
-    elif resp_option == 'spectrum':
-
-        if not os.path.isdir(resp_dir):
-            raise IOError ('repsonse spectrum folder %s not exist' % resp_dir)
-
-        st = resp_spectrum(st[0],resp_dir,downsamp_freq)
-        st[0].data = bandpass(st[0].data,pre_filt[0],pre_filt[-1],downsamp_freq,corners=4,zerophase=False)
-
-    elif resp_option == 'polezeros':
-        st = 'good'
-
-    return st
-
-
-@jit('float32[:](float64[:],float32)')
-def segment_interpolate(sig1,nfric):
-    '''
-    a sub-function of clean_daily_segment:
-
-    interpolate the data according to fric to ensure all points stand on interger times
-    of sampling rate (e.g., starttime = 00:00:00.015, delta = 0.05.)
-
-    input parameters include:
-    sig1: float64 -> seismic recordings in a 1D array
-    nfric: float32 -> the amount of time difference between the point and the adjacent assumed samples
-    '''
-    npts = len(sig1)
-    sig2 = np.zeros(npts,dtype=np.float32)
-
-    #----instead of shifting, do a interpolation------
-    for ii in range(npts-1):
-        sig2[ii]=sig1[ii]+nfric*(sig1[ii]-sig1[ii+1])
-    sig2[npts-1]=sig1[npts-1]
-
-    return sig2
-
-def clean_daily_segment(tr):
-    '''
-    subfunction to clean the daily recordings: 1) filling the gaps by
-    constructing a zeros array from 00:00:00.0 to 24:00:00.0, 2) removing
-    the ones with gaps >30% of the trace, 3) interpolate the segment to
-    ensure all samples are are interger times of sampling rate.
-
-    tr: obspy stream object
-    '''
-    #-----universal starting-ending time--------
-    stream_time = tr[0].stats.starttime
-    starttime=obspy.UTCDateTime(stream_time.year,stream_time.month,stream_time.day,0,0,0)
-    
-    #-----construct a new array to store day-long data----
-    delta = tr[0].stats.delta
-    npts  = int(86400/delta)
-    tdata = np.zeros(npts,dtype=np.float32)
-    tindx = 0
-    ngaps = 0
-
-    #----go through each segment-----
-    for itr in tr:
-
-        tnpts = itr.stats.npts
-        
-        #-----when first point is at a friction of the sampling rate-----
-        fric = (itr.stats.starttime.microsecond/1E6)
-        fric = fric%delta
-        if fric:
-            sdata = segment_interpolate(itr.data,np.float32(fric/delta))
-        
-            #----reset the time by removing the sample-time discrepancy-----
-            itr.stats.starttime.microsecond-=int(fric*1E6)
-        else:
-            sdata = itr.data
-        
-        #--------find the index to be copied in tdata----------
-        indx1 = int((itr.stats.starttime-starttime)/delta)
-        indx2 = indx1+tnpts
-        ngaps += (indx1-tindx)
-        tdata[indx1:indx2]=sdata[:]
-        tindx = indx2
-    ngaps += (npts-indx2)
-
-    #----copy the data and status to a new stream-----
-    if ngaps < 0.3*npts:
-        ntr = obspy.Stream()
-        ntr.append(obspy.Trace())
-        ntr[0].stats = tr[0].stats
-        ntr[0].data  = tdata
-        ntr[0].stats.starttime = starttime
-
-    else:
-        ntr=[]
-        print('more than 30 percentage gaps: all traces removed!')
-
-    return ntr
-
-def clean_timerange2day(tr):
-    """
-    Cut all data to fit the start and end time. 
-    If there is no common time range an exception is raised. 
-    Fill with zeros to match start and end times.
-    Data is merged into a single trace.
-    
-    :rtype: :class: `~obspy.core.stream`
-    :returns: stream merged and cleaned    
-    """
-    stream_time = tr[0].stats.starttime
-    starttime=obspy.UTCDateTime(stream_time.year,stream_time.month,stream_time.day,0,0,0)    
-    tr.merge(method=1, fill_value='interpolate')
-    tr.trim(starttime=starttime,endtime=starttime+datetime.timedelta(days=1))
-    Npts=int(86400./tr[0].stats.delta)
-    for st in tr:
-        #print(st.stats.starttime)
-        #-------this is only a crude correction----------
-        Istart =int( (st.stats.starttime-starttime)/st.stats.delta) # data starts after midnight
-        Iend   =Npts-int( ((starttime+datetime.timedelta(days=1))-st.stats.endtime)/st.stats.delta) # data ends before midnight.
-        D=np.zeros(Npts,dtype=np.float32)
-        D[Istart-1:Iend]=st.data
-        st.data=np.zeros(len(D))
-        st.data=D
-        st.stats.starttime=starttime
-        st.stats.npts=len(D)
-    
-    return tr
-
 def make_stationlist_CSV(inv,path):
     '''
     subfunction to output the station list into a CSV file
@@ -411,23 +229,20 @@ def make_stationlist_CSV(inv,path):
     locs.to_csv(os.path.join(path,'locations.txt'),index=False)
 
 
-def resp_spectrum(source,resp_dir,downsamp_freq):
+def resp_spectrum(source,resp_dir,downsamp_freq,sta):
     '''
     remove the instrument response with response spectrum from evalresp.
     the response spectrum is evaluated based on RESP/PZ files and then 
     inverted using obspy function of invert_spectrum. they are stored as
     nyc file in directory of resp_dir. 
     '''
-    #--------get the station name------------
-    sta = source[2:4]
-
     #---------do the downsampling here--------
     if downsamp_freq != source.stats.sampling_rate:
         source = downsample(source,downsamp_freq)
     
     dt=1/source.stats.sampling_rate
 
-    #-----load the instrument response stored as resp.station.nyc in resp_dir-----
+    #-----load the instrument response nyc file-----
     resp_file = os.path.join(resp_dir,'resp.'+sta+'.npy')
     if not os.path.isfile(resp_file):
         print("no instrument response for "+sta)
@@ -571,23 +386,20 @@ def get_station_pairs(sta):
             pairs.append((sta[ii],sta[jj]))
     return pairs
 
-@jit('float32(float32,float32,float32,float32)') 
+@jit(float32(float32,float32,float32,float32)) 
 def get_distance(lon1,lat1,lon2,lat2):
     '''
     calculate distance between two points on earth
-    
-    lon:longitude in degrees
-    lat:latitude in degrees
     '''
     R = 6372800  # Earth radius in meters
-    pi = 3.1415926536
     
-    phi1    = lat1*pi/180
-    phi2    = lat2*pi/180
-    dphi    = (lat2 - lat1)*pi/180
-    dlambda = (lon2 - lon1)*pi/180
+    phi1, phi2 = math.radians(lat1), math.radians(lat2) 
+    dphi       = math.radians(lat2 - lat1)
+    dlambda    = math.radians(lon2 - lon1)
     
-    a = math.sin(dphi/2)**2+math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    a = math.sin(dphi/2)**2 + \
+        math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    
     return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/1000
 
 def get_coda_window(dist,vmin,maxlag,dt,wcoda):
@@ -1027,6 +839,22 @@ def moving_ave(A,N):
         if B[pos]==0:
             B[pos]=1
     return B[N:-N]
+
+def station_list(station):
+    """
+
+    Create dataframe with start & end times, chan for each station.
+    """
+    files = glob.glob(os.path.join(station,'*/*'))
+    clse = [os.path.basename(a).strip('.mseed') for a in files]
+    clse_split = [c.split('.') for c in clse]
+    df = pd.DataFrame(clse_split,columns=['CHAN','LOC','START','END'])
+    df = df.drop(columns='LOC')
+    df['FILES'] = files
+    df['START'] = pd.to_datetime(df['START'].apply(lambda x: x.split('T')[0]))
+    df['END'] = pd.to_datetime(df['END'].apply(lambda x: x.split('T')[0]))
+    df = df.set_index('START')
+    return df
 
 def xyz_to_zne(st):
     """

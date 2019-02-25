@@ -16,19 +16,25 @@ from mpi4py import MPI
 
 '''
 this script pre-processs the noise data for each single station using the parameters given below 
-and stored the whitened and nomalized fft trace for each station in ASDF format. 
-- C.Jiang, T.Clements, M.Denolle (Nov.09.2018)
+and stored the whitened and nomalized fft trace for each station in a HDF5 file as *.h5.
 
-updated to handle SAC, MiniSeed and ASDF formate inputs (Feb.20.2019). 
+implemented with MPI (Nov.09.2018)
+by C.Jiang, T.Clements, M.Denolle
+
+updates to handle SAC, MiniSeed and ASDF formate inputs (Feb.20.2019). 
 '''
 
 t00=time.time()
+#------form the absolute paths-------
+#locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
+#FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
+#FFTDIR = '/n/regal/denolle_lab/cjiang/FFT'
+#event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
+#resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
-#------absolute path parameters-------
 rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
 FFTDIR = os.path.join(rootpath,'FFT/test')
 event = os.path.join(rootpath,'data_download/*.h5')
-resp_dir = os.path.join(rootpath,'DATA/resp')
 
 #------input file types: make sure it is asdf--------
 asdf  = True
@@ -144,7 +150,7 @@ for ista in range (rank,splits+size-extra,size):
                     all_madS = noise_module.mad(source.data)
                     all_stdS = np.std(source.data)
                     if all_madS==0 or all_stdS==0:
-                        print("continue! madS or stdS equeals to 0 for %s" % source)
+                        print("continue! madS or stdS equeals to 0 for %s" %tfile)
                         continue
 
                     trace_madS = []
@@ -165,7 +171,6 @@ for ista in range (rank,splits+size-extra,size):
                         win.taper(max_percentage=0.05,max_length=20)
                         source_slice.append(win)
                     del source
-                    
                     t1=time.time()
                     if flag:
                         print("breaking records takes %f s"%(t1-t0))
@@ -188,6 +193,7 @@ for ista in range (rank,splits+size-extra,size):
                         dataS[ii,0:nptsS[ii]] = trace.data
                         if ii==0:
                             dataS_stats=trace.stats
+
 
                     #------check the dimension of the dataS-------
                     if dataS.ndim == 1:
@@ -225,6 +231,7 @@ for ista in range (rank,splits+size-extra,size):
                     #-------------save FFTs as HDF5 files-----------------
                     crap=np.zeros(shape=(N,Nfft//2),dtype=np.complex64)
                     fft_h5 = os.path.join(FFTDIR,network+'.'+station+'.h5')
+                    print(fft_h5,FFTDIR)
 
                     if not os.path.isfile(fft_h5):
                         with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:

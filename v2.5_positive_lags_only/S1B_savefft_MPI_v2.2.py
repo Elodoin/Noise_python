@@ -102,10 +102,6 @@ for ista in range (rank,splits+size-extra,size):
 
             #----loop through each channel----
             for tfile in tfiles:
-
-                #--------------------------------------------------------------
-                #---what if this station has several segments in that day------
-                #--------------------------------------------------------------
                 sacfile = os.path.basename(tfile)
                 try:
                     source1 = obspy.read(tfile)
