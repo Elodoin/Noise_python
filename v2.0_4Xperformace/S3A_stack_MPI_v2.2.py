@@ -18,9 +18,10 @@ t0=time.time()
 #STACKDIR = '/n/regal/denolle_lab/cjiang/STACK'
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
-CCFDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/CCF'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations_small.txt'
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/STACK'
+rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
+CCFDIR = os.path.join(rootpath,'test/CCF')
+locations = os.path.join(rootpath,'locations_small.txt')
+STACKDIR = os.path.join(rootpath,'test/STACK')
 
 flag = False
 maxlag = 1800

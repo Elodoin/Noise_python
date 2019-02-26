@@ -36,8 +36,8 @@ ttt0=time.time()
 #locations = '/n/home13/chengxin/cases/KANTO/locations_small.txt'
 
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-FFTDIR = os.path.join(rootpath,'FFT')
-CCFDIR = os.path.join(rootpath,'check_again/CCF')
+FFTDIR = os.path.join(rootpath,'test/FFT')
+CCFDIR = os.path.join(rootpath,'test/CCF')
 
 #-----some control parameters------
 flag=False              #output intermediate variables and computing times
@@ -50,7 +50,7 @@ step=1800
 maxlag=1800
 method='deconv'
 start_date = '2010_01_01'
-end_date   = '2010_01_01'
+end_date   = '2010_01_09'
 
 if auto_corr and method=='coherence':
     raise ValueError('Please set method to decon: coherence cannot be applied when auto_corr is wanted!')

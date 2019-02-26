@@ -197,18 +197,17 @@ def portion_gaps(stream):
     get the accumulated gaps (npts) by taking advantage of the stream function 
     of get_gaps. remove it if gap length is more than 50% of the trace size 
     '''
-    pgaps = []
+    pgaps=0
     npts = (stream[-1].stats.endtime-stream[0].stats.starttime)*stream[0].stats.sampling_rate
 
     #----gaps_info contain all gap information----
     gaps_info = stream.get_gaps()
 
     if len(gaps_info)==0:
-        pgaps = 0
         return pgaps
     else:
         for ii in range(len(gaps_info)):
-            pgaps += gaps_info[ii][-1]
+            pgaps += int(gaps_info[ii][-1])
 
     return pgaps/npts
 
@@ -219,6 +218,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=None,resp
         - check sample rate is matching (from original process_raw)
         - remove small traces (from original process_raw)
         - remove trend and mean of each trace
+        - interpolated to ensure all samples are at interger times of the sampling rate
         - low pass and downsample the data  (from original process_raw)
         - remove instrument response according to the option of resp_option. 
             "inv" -> using inventory information and obspy function of remove_response;
@@ -245,6 +245,15 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=None,resp
         tst.detrend(type="constant")
         tst.detrend(type="linear")
 
+        #-------when starttimes are between sampling points-------
+        delta= tst.stats.delta
+        fric = (tst.stats.starttime.microsecond/1E6)
+        fric = fric%delta
+        if fric:
+            tst.data = segment_interpolate(np.float32(tst.data),float(fric/delta))
+            #--reset the time to remove the discrepancy---
+            tst.stats.starttime-=fric
+
     ##############################################################
     #---interpolate is dangerous here for traces with long-gaps---
     ##############################################################
@@ -254,6 +263,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=None,resp
     if abs(downsamp_freq-sps) > 1E-4:
         #-----low pass filter with corner frequency = 0.9*Nyquist frequency----
         st[0].data = lowpass(st[0].data,freq=0.4*sps,df=sps,corners=4,zerophase=True)
+        #st[0].data = bandpass(st[0].data,fmin=0.01,fmax=0.4*sps,df=sps,corners=4,zerophase=True)
 
         #----make downsampling------
         st.interpolate(downsamp_freq,method='weighted_average_slopes')
@@ -262,7 +272,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=None,resp
     #-----check whether file folder exists-------
     if resp is not None:
         if resp != 'inv':
-            if (respdir is not None) or (not os.path.isdir(respdir)):
+            if (respdir is None) or (not os.path.isdir(respdir)):
                 raise ValueError('response file folder not found! abort!')
 
         if resp == 'inv':
@@ -298,7 +308,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=None,resp
     return st
 
 
-@jit('float32[:](float64[:],float32)')
+@jit('float32[:](float32[:],float32)')
 def segment_interpolate(sig1,nfric):
     '''
     a sub-function of clean_daily_segments:
@@ -325,23 +335,10 @@ def clean_daily_segments(tr):
     subfunction to clean the tr recordings. only the traces with at least 0.5-day long
     sequence (respect to 00:00:00.0 of the day) is kept. note that the trace here could
     be of several days recordings, so this function helps to break continuous chunck 
-    into a day-long segment from 00:00:00.0 to 24:00:00.0. the trace is interpolated to
-    ensure all samples are at interger times of the sampling rate.
+    into a day-long segment from 00:00:00.0 to 24:00:00.0.
 
     tr: obspy stream object
     '''
-    delta = tr[0].stats.delta
-    npts  = int(86400/delta)
-    data  = tr[0].data
-
-    #-------when starttimes are between sampling points-------
-    fric = (tr[0].stats.starttime.microsecond/1E6)
-    fric = fric%delta
-    if fric:
-        sdata = segment_interpolate(tr[0].data,np.float32(fric/delta))
-        #--reset the time to remove the discrepancy---
-        tr[0].stats.starttime.microsecond-=int(fric*1E6)
-
     #-----all potential-useful time information-----
     stream_time = tr[0].stats.starttime
     time0 = obspy.UTCDateTime(stream_time.year,stream_time.month,stream_time.day,0,0,0)
@@ -360,48 +357,18 @@ def clean_daily_segments(tr):
         tr=[]
         return tr
 
-    elif ndays==1:
-        tdata  = np.zeros(npts,dtype=np.float32)
-        tindx1 = int((stream_time-starttime)/delta)
-        tindx2 = int((tr[0].stats.endtime-starttime)/delta)
-        tdata[tindx1:tindx2] = tr[0].data
-        tr[0].data  = tdata
-        tr[0].stats.starttime = starttime
-        return tr
-
     else:
         #-----make a new stream------
         ntr = obspy.Stream()
+        ttr = tr[0].copy()
         #----trim a continous segment into day-long sequences----
         for ii in range(ndays):    
-            tdata = np.zeros(npts,dtype=np.float32)
-            ttr = tr[0].copy()
-            
-            if ii==0:
-                #------index for new array of tdata--------
-                tindx1 = int((stream_time-starttime)/delta)
-                tindx2 = npts-tindx1
-                #------index for orignal data array--------
-                oindx1 = 0
-                oindx2 = int(tindx2-tindx1)
-            
-            elif ii<ndays-1:
-                tindx1 = 0
-                tindx2 = tindx1+npts
-                oindx1 = oindx2+1
-                oindx2 = oindx1+int(tindx2-tindx1)
-            
-            elif ii==ndays-1:
-                tindx1 = 0
-                tindx2 = tindx1+int((tr[0].stats.endtime-starttime)/delta)
-                oindx1 = oindx2+1
-                oindx2 = oindx1+int(tindx2-tindx1)
-            
-            tdata[tindx1:tindx2] = data[oindx1:oindx2]
-            ttr.data = tdata
-            ttr.stats.starttime = starttime
-            ntr.append(ttr)
-            starttime += datetime.timedelta(days=1)
+            tr[0] = ttr.copy()
+            endtime = starttime+datetime.timedelta(days=1)
+            tr[0].trim(starttime=starttime,endtime=endtime,pad=True,fill_value=0)
+
+            ntr.append(tr[0])
+            starttime = endtime
 
     return ntr
 

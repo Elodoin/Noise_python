@@ -34,9 +34,9 @@ t00=time.time()
 #resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-FFTDIR = os.path.join(rootpath,'FFT')
+FFTDIR = os.path.join(rootpath,'test/FFT')
 locations = os.path.join(rootpath,'locations_small.txt')
-event = os.path.join(rootpath,'noise_data/Event_2010_0??')
+event = os.path.join(rootpath,'noise_data/Event_2010_00?')
 #--------think about how to simplify this----------
 resp_dir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
 
@@ -142,7 +142,7 @@ for ista in range (rank,splits+size-extra,size):
                         print('Next! Extraced response file not match SAC file length')
                         continue
 
-                    source = noise_module.resp_spectrum(source,resp_dir,downsamp_freq,station)
+                    source = noise_module.resp_spectrum(source,resp_dir,downsamp_freq)
                     if not source:
                         continue
                     source.data=bandpass(source.data,freqmin,freqmax,downsamp_freq,corners=4,zerophase=False)
