@@ -34,20 +34,18 @@ sta="MD12"                                         # station to download
 start_date = '2016_07_14'
 end_date   = '2016_07_15'
 
-prepro  = True                                  # pre-processing-> check delta, remove bad trace and merge to a daily long sequence
 checkt  = True                                  # check for traces with points bewtween sample intervals
-resp    = True                                  # boolean to remove instrumental response
-resp_type = "spectrum"
+resp    = 'spectrum'                                  # boolean to remove instrumental response
+respdir = 'resp_10hz'
+pre_filt = [0.04,0.05,4,5]
 output_CSV=True                                 # output station.list to a CSV file to be used in later stacking steps
 flag = False                                    # print progress when running the script
 
 #---provence of the data in ASDF files--
-if resp and prepro:
-    tags = 'prepro_resp'
+if resp and checkt:
+    tags = 'time_resp'
 elif resp:
     tags = 'resp_removed'
-elif prepro:
-    tags = 'preprocessed'
 else:
     tags = 'raw-recordings'
 
@@ -124,11 +122,15 @@ for K in inv:
                     
                 if len(tr):
                     # clean up data
-                    tr = noise_module.process_raw_v1(tr,NewFreq,prepro,checkt,resp,resp_type)
+                    tr = noise_module.preprocess_raw(tr,NewFreq,checkt,pre_filt,resp,respdir)
 
                     # only keep the one with good data after processing
-                    if len(tr):
-                        ds.add_waveforms(tr,tag=tags)
+                    if len(tr)>0:
+                        if len(tr)==1:
+                            ds.add_waveforms(tr,tag=tags)
+                        else:
+                            for ii in range(len(tr)):
+                                ds.add_waveforms(tr[ii],tag=tags)
 
                     if flag:
                         print(ds) # sanity check
