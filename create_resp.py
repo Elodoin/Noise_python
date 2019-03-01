@@ -12,13 +12,13 @@ from obspy.signal.util import _npts2nfft
 #-----directory to station list and response files--------
 #resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_all'
 #locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/locations.txt'
-resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_4types'
-locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/instrument/resp_4types/station.lst'
+resp_dir = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/instrument/resp_4types'
+locations = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/instrument/resp_4types/station.lst'
 
 #-----common variables for extracting resp using evalresp function------
 water_level = 60
 prefilt = [0.04,0.05,2,3]
-downsamp_freq=10
+downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
 step=1800 
@@ -53,5 +53,5 @@ for ii in range(nsta):
     #respz *=cos_win
     plt.show()
 
-    output = os.path.join(resp_dir,'resp_spectrum/resp.'+station+'.npy')
-    np.save(output,respz)
+    output = os.path.join(resp_dir,'resp.'+station+'.npy')
+    np.save(output,[np.float32(freq),np.complex64(respz)])

@@ -26,28 +26,22 @@ script of S1_savASDF_v2.2
 '''
 
 t00=time.time()
-#------form the absolute paths-------
-#locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
-#FFTDIR = '/n/flashlfs/mdenolle/KANTO/DATA/FFT/'
-#FFTDIR = '/n/regal/denolle_lab/cjiang/FFT'
-#event = '/n/flashlfs/mdenolle/KANTO/DATA/????/Event_????_???'
-#resp_dir = '/n/flashlfs/mdenolle/KANTO/DATA/resp'
 
 rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-FFTDIR = os.path.join(rootpath,'test/FFT')
+FFTDIR = os.path.join(rootpath,'FFT/test')
 locations = os.path.join(rootpath,'locations_small.txt')
-event = os.path.join(rootpath,'noise_data/Event_2010_00?')
+event = os.path.join(rootpath,'noise_data/Event_2010_001')
 #--------think about how to simplify this----------
-resp_dir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
+respdir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
 
 #-----boolen parameters------
-prepro=False                #preprocess the data?
+prepro=True                #preprocess the data?
 to_whiten=False             #whiten the spectrum?
 time_norm=False             #normalize in time?
-rm_resp_spectrum=False      #remove response using spectrum?
-rm_resp_inv=False           #remove response using inventory
 flag=False                  #print intermediate variables and computing time
 
+checkt  = True              #check for traces with points bewtween sample intervals
+resp    = 'spectrum'    
 
 #----more common variables---
 pre_filt=[0.04,0.05,4,6]
@@ -110,7 +104,7 @@ for ista in range (rank,splits+size-extra,size):
                 try:
                     source1 = obspy.read(tfile)
                 except Exception as inst:
-                    print(type(inst))
+                    print(inst)
                     continue
                 comp = source1[0].stats.channel
                 
@@ -122,41 +116,18 @@ for ista in range (rank,splits+size-extra,size):
 
                 #------------Pre-Processing-----------
                 source = obspy.Stream()
-                source = source1.merge(method=1,fill_value=0.)[0]
+                source = source1.merge(method=1,fill_value=0.)
                 
                 if prepro:
                     t0=time.time()
-                    source = noise_module.process_raw(source1, downsamp_freq)
-                    source = source.merge(method=1, fill_value=0.)[0]
+                    source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,respdir)
                     t1=time.time()
                     if flag:
                         print("prepro takes %f s" % (t1-t0))
-                
-                #----remove instrument response using extracted files-----
-                if rm_resp_spectrum:
-                    t0=time.time()
-                    if not os.path.isdir(resp_dir):
-                        raise IOError ('repsonse spectrum folder %s not exist' % resp_dir)
-
-                    if source.stats.npts!=downsamp_freq*24*cc_len:
-                        print('Next! Extraced response file not match SAC file length')
-                        continue
-
-                    source = noise_module.resp_spectrum(source,resp_dir,downsamp_freq)
-                    if not source:
-                        continue
-                    source.data=bandpass(source.data,freqmin,freqmax,downsamp_freq,corners=4,zerophase=False)
-                    t1=time.time()
-                    if flag:
-                        print("remove instrument takes %f s" % (t1-t0))
-                
-                #-----using inventory------
-                elif rm_resp_inv:
-                    source.data=noise_module.remove_resp(source.data,source.stats,inv1)
 
                 #----------variables to define days with earthquakes----------
-                all_madS = noise_module.mad(source.data)
-                all_stdS = np.std(source.data)
+                all_madS = noise_module.mad(source[0].data)
+                all_stdS = np.std(source[0].data)
                 if all_madS==0 or all_stdS==0:
                     print("continue! madS or stdS equeals to 0 for %s" %tfile)
                     continue
@@ -169,7 +140,7 @@ for ista in range (rank,splits+size-extra,size):
 
                 #--------break a continous recording into pieces----------
                 t0=time.time()
-                for ii,win in enumerate(source.slide(window_length=cc_len, step=step)):
+                for ii,win in enumerate(source[0].slide(window_length=cc_len, step=step)):
                     win.detrend(type="constant")
                     win.detrend(type="linear")
                     trace_madS.append(np.max(np.abs(win.data))/all_madS)
@@ -261,7 +232,7 @@ for ista in range (rank,splits+size-extra,size):
 
             del tfiles
         t11=time.time()
-        print('it takes '+str(t11-t10)+' s to process one station in step 1')
+        print('it takes '+str(t11-t10)+' s to process %s in step 1' % station)
 
 t01=time.time()
 print('step1 takes '+str(t01-t00)+' s')
