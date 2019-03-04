@@ -19,11 +19,13 @@ t0=time.time()
 #locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-CCFDIR = os.path.join(rootpath,'test/CCF')
+CCFDIR = os.path.join(rootpath,'CCF')
 locations = os.path.join(rootpath,'locations_small.txt')
-STACKDIR = os.path.join(rootpath,'test/STACK')
+STACKDIR = os.path.join(rootpath,'STACK')
 
 flag = False
+ssac = True
+sasdf= True
 maxlag = 1800
 downsamp_freq=20
 dt=1/downsamp_freq

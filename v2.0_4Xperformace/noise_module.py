@@ -154,15 +154,16 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=False,res
         print('No traces in Stream: Continue!')
         return st
 
-    delta = st[0].stats.delta
+    sps = int(st[0].stats.sampling_rate)
     #-----remove mean and trend for each trace before merge------
     for ii in range(len(st)):
+        if st[ii].stats.sampling_rate != sps:
+            st[ii].stats.sampling_rate = sps
         st[ii].data = np.float32(st[ii].data)
         st[ii].data = scipy.signal.detrend(st[ii].data,type='constant')
         st[ii].data = scipy.signal.detrend(st[ii].data,type='linear')
 
     st.merge(method=1,fill_value=0)
-    sps = st[0].stats.sampling_rate
 
     if abs(downsamp_freq-sps) > 1E-4:
         #-----low pass filter with corner frequency = 0.9*Nyquist frequency----
@@ -201,7 +202,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=False,res
             specfile = glob.glob(os.path.join(respdir,'*'+station+'*'))
             if len(specfile)==0:
                 raise ValueError('no response sepctrum found for %s' % station)
-            st = resp_spectrum(st[0],specfile[0],downsamp_freq)
+            st = resp_spectrum(st,specfile[0],downsamp_freq,pre_filt)
 
         elif resp == 'RESP_files':
             print('using RESP files')
@@ -274,7 +275,7 @@ def segment_interpolate(sig1,nfric):
 
     return sig2
 
-def resp_spectrum(source,resp_file,downsamp_freq):
+def resp_spectrum(source,resp_file,downsamp_freq,pre_filt=None):
     '''
     remove the instrument response with response spectrum from evalresp.
     the response spectrum is evaluated based on RESP/PZ files and then 
@@ -286,8 +287,8 @@ def resp_spectrum(source,resp_file,downsamp_freq):
     spec_freq = max(respz[0])
 
     #-------on current trace----------
-    nfft = _npts2nfft(source.stats.npts)
-    sps  = source.stats.sampling_rate
+    nfft = _npts2nfft(source[0].stats.npts)
+    sps  = int(source[0].stats.sampling_rate)
 
     #---------do the interpolation if needed--------
     if spec_freq < 0.5*sps:
@@ -298,11 +299,14 @@ def resp_spectrum(source,resp_file,downsamp_freq):
         nrespz= np.interp(nfreq,np.real(respz[0][indx]),respz[1][indx])
         
     #----do interpolation if necessary-----
-    source_spect = np.fft.rfft(source.data,n=nfft)
+    source_spect = np.fft.rfft(source[0].data,n=nfft)
 
     #-----nrespz is inversed (water-leveled) spectrum-----
     source_spect *= nrespz
-    source.data = np.fft.irfft(source_spect)[0:source.stats.npts]
+    source[0].data = np.fft.irfft(source_spect)[0:source[0].stats.npts]
+
+    if pre_filt is not None:
+        source[0].data = bandpass(source[0].data,pre_filt[0],pre_filt[-1],df=sps,corners=4,zerophase=True)
 
     return source
 
@@ -403,11 +407,10 @@ def get_event_list(str1,str2,inc_days):
     d2=datetime.datetime(y2,m2,d2)
     dt=datetime.timedelta(days=inc_days)
 
-    while(d1<=d2):
+    while(d1<d2):
         event.append(d1.strftime('%Y_%m_%d'))
         d1+=dt
-    if d1!=d2:
-        event.append(d2.strftime('%Y_%m_%d'))
+    event.append(d2.strftime('%Y_%m_%d'))
     
     return event
 
@@ -1044,11 +1047,11 @@ def check_sample(stream):
     else:
         freqs = []	
         for tr in stream:
-            freqs.append(tr.stats.sampling_rate)
+            freqs.append(int(tr.stats.sampling_rate))
 
     freq = max(freqs)
     for tr in stream:
-        if tr.stats.sampling_rate != freq:
+        if int(tr.stats.sampling_rate) != freq:
             stream.remove(tr)
 
     return stream				

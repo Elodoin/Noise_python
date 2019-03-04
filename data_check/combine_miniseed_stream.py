@@ -273,16 +273,17 @@ for ii in range(len(sacfiles)):
     source.append(temp[0])
 
 #---some control parameters
-checkt=True
-NewFreq=50
-pre_filt=[]
-resp=False              # not removing response here
+checkt  = True
+NewFreq = 20
+pre_filt= [0.04,0.05,4,5]
+resp    = 'spectrum'              # not removing response here
+respdir = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/instrument/resp_4types/resp_spect_20Hz'
 
 #----do the pre-processing------
 print('before pre-processing:',source)
 osource=source.copy()
 
-nsource=preprocess_raw(osource,NewFreq,checkt,pre_filt,resp,respdir=False)
+nsource=preprocess_raw(osource,NewFreq,checkt,pre_filt,resp,respdir)
 print('after processing:',nsource)
 
 #---note the order in source is a mass----

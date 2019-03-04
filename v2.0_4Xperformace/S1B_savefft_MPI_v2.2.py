@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import noise_module
 import time
 import pyasdf
+import h5py
 import pandas as pd
 from mpi4py import MPI
 
@@ -27,21 +28,23 @@ script of S1_savASDF_v2.2
 
 t00=time.time()
 
-rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-FFTDIR = os.path.join(rootpath,'FFT/test')
-locations = os.path.join(rootpath,'locations_small.txt')
-event = os.path.join(rootpath,'noise_data/Event_2010_001')
+rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
+FFTDIR = os.path.join(rootpath,'FFT')
+locations = os.path.join(rootpath,'station.lst')
+event = os.path.join(rootpath,'noise_data/Event_2010_*')
 #--------think about how to simplify this----------
 respdir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
 
 #-----boolen parameters------
-prepro=True                #preprocess the data?
+prepro   =True              #preprocess the data?
 to_whiten=False             #whiten the spectrum?
 time_norm=False             #normalize in time?
-flag=False                  #print intermediate variables and computing time
+asdf     =False
+hdf5     =True
+flag     =False             #print intermediate variables and computing time
 
 checkt  = True              #check for traces with points bewtween sample intervals
-resp    = 'spectrum'    
+resp    = False    
 
 #----more common variables---
 pre_filt=[0.04,0.05,4,6]
@@ -61,11 +64,18 @@ size = comm.Get_size()
 #-----------------------
 
 if rank == 0:
+    #-----check whether dir exist----
+    if not os.path.isdir(FFTDIR):
+        os.mkdir(FFTDIR)
+
     #----define common variables----
     locs = pd.read_csv(locations)
     nsta = len(locs)
     splits = nsta
     tdir = sorted(glob.glob(event))
+
+    if len(tdir)==0 or nsta==0:
+        raise IOError('no available files for doing FFT')
 else:
     splits,locs,tdir = [None for _ in range(3)]
 
@@ -102,21 +112,17 @@ for ista in range (rank,splits+size-extra,size):
                 #--------------------------------------------------------------
                 sacfile = os.path.basename(tfile)
                 try:
-                    source1 = obspy.read(tfile)
+                    source = obspy.read(tfile)
                 except Exception as inst:
                     print(inst)
                     continue
-                comp = source1[0].stats.channel
+                comp = source[0].stats.channel
                 
                 if flag:
                     print("working on sacfile %s" % sacfile)
 
                 #---------make an inventory---------
-                inv1=noise_module.stats2inv(source1[0].stats)
-
-                #------------Pre-Processing-----------
-                source = obspy.Stream()
-                source = source1.merge(method=1,fill_value=0.)
+                inv1=noise_module.stats2inv(source[0].stats)
                 
                 if prepro:
                     t0=time.time()
@@ -149,7 +155,7 @@ for ista in range (rank,splits+size-extra,size):
                     nptsS.append(win.stats.npts)
                     win.taper(max_percentage=0.05,max_length=20)
                     source_slice.append(win)
-                del source, source1
+                del source
                 t1=time.time()
                 if flag:
                     print("breaking records takes %f s"%(t1-t0))
@@ -159,7 +165,6 @@ for ista in range (rank,splits+size-extra,size):
                     continue
 
                 source_params= np.vstack([trace_madS,trace_stdS,nonzeroS]).T
-                del trace_madS, trace_stdS, nonzeroS
 
                 #---------seems un-necesary for data already pre-processed with same length (zero-padding)-------
                 N = len(source_slice)
@@ -172,7 +177,6 @@ for ista in range (rank,splits+size-extra,size):
                     dataS[ii,0:nptsS[ii]] = trace.data
                     if ii==0:
                         dataS_stats=trace.stats
-
 
                 #------check the dimension of the dataS-------
                 if dataS.ndim == 1:
@@ -200,9 +204,9 @@ for ista in range (rank,splits+size-extra,size):
                     if norm_type == 'one_bit': 
                         white = np.sign(white)
                     elif norm_type == 'running_mean':
-                        white = noise_module.running_abs_mean(white,int(1 / freqmin / 2))
+                        white = noise_module.moving_ave(white,int(1 / freqmin / 2))
                     source_white = scipy.fftpack.fft(white, Nfft, axis=axis)
-                    del white
+
                     t1=time.time()
                     if flag:
                         print("temporal normalization takes %f s"%(t1-t0))
@@ -211,26 +215,48 @@ for ista in range (rank,splits+size-extra,size):
                 crap=np.zeros(shape=(N,Nfft//2),dtype=np.complex64)
                 fft_h5 = os.path.join(FFTDIR,network+'.'+station+'.h5')
 
-                if not os.path.isfile(fft_h5):
-                    with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as ds:
-                        pass # create pyasdf file 
-        
-                with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
-                    parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
-                        locs.iloc[ista],comp,Nfft,N)
-                    
-                    savedate = '{0:04d}_{1:02d}_{2:02d}'.format(dataS_stats.starttime.year,\
-                        dataS_stats.starttime.month,dataS_stats.starttime.day)
-                    path = savedate
+                if asdf:
+                    if not os.path.isfile(fft_h5):
+                        with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
+                            pass # create pyasdf file 
+            
+                    with pyasdf.ASDFDataSet(fft_h5,mpi=False,compression=None) as fft_ds:
+                        parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
+                            locs.iloc[ista],comp,Nfft,N)
+                        
+                        savedate = '{0:04d}_{1:02d}_{2:02d}'.format(dataS_stats.starttime.year,\
+                            dataS_stats.starttime.month,dataS_stats.starttime.day)
+                        path = savedate
 
-                    data_type = str(comp)
-                    fft_ds.add_stationxml(inv1)
-                    crap[:,:Nfft//2]=source_white[:,:Nfft//2]
-                    fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                        data_type = str(comp)
+                        fft_ds.add_stationxml(inv1)
+                        crap[:,:Nfft//2]=source_white[:,:Nfft//2]
+                        fft_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
-                del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params            
+                    del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params   
+                        
+                elif hdf5:
+                    if not os.path.isfile(fft_h5):
+                        with h5py.File(fft_h5,"w") as fft_ds:
+                            pass # create pyasdf file 
+            
+                    with h5py.File(fft_h5,"a") as fft_ds:
+                        parameters = noise_module.fft_parameters(dt,cc_len,dataS_stats,dataS_t,source_params, \
+                            locs.iloc[ista],comp,Nfft,N)
+                        
+                        savedate = '{0:04d}_{1:02d}_{2:02d}'.format(dataS_stats.starttime.year,\
+                            dataS_stats.starttime.month,dataS_stats.starttime.day)
+                        path = '_'.join(['fft', network, station, comp, savedate])
 
-            del tfiles
+                        crap[:,:Nfft//2]=source_white[:,:Nfft//2]
+                        tmp=fft_ds.create_dataset(path+".real",data=np.real(crap),shape=np.shape(crap),dtype=np.float32)
+                        for key in parameters.keys():
+                            tmp.attrs[key]=parameters[key]
+                            #print("key",key,":",parameters[key])
+                        tmp=fft_ds.create_dataset(path+".imag",data=np.imag(crap),shape=np.shape(crap),dtype=np.float32)
+
+                    del fft_ds, crap, parameters, source_slice, source_white, dataS, dataS_stats, dataS_t, source_params                 
+
         t11=time.time()
         print('it takes '+str(t11-t10)+' s to process %s in step 1' % station)
 
