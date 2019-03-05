@@ -142,7 +142,7 @@ def preprocess_raw(st,downsamp_freq,clean_time=True,pre_filt=None,resp=False,res
     '''
 
     #----remove the ones with too many segments and gaps------
-    if len(st) > 100 or portion_gaps(st) > 0.5:
+    if len(st) > 100 or portion_gaps(st) > 0.2:
         print('Too many traces or gaps in Stream: Continue!')
         st=[]
         return st
@@ -823,7 +823,7 @@ def pws(arr,power=2.,sampling_rate=20.,pws_timegate = 5.):
 
     # smoothing 
     timegate_samples = int(pws_timegate * sampling_rate)
-    phase_stack = runningMean(phase_stack,timegate_samples)
+    phase_stack = moving_ave(phase_stack,timegate_samples)
     weighted = np.multiply(arr,phase_stack)
     return np.mean(weighted,axis=0)/N
 
@@ -1056,31 +1056,6 @@ def check_sample(stream):
 
     return stream				
 
-def downsample(stream,freq):
-    """ 
-    Downsamples stream to specified samplerate.
-
-    Uses Obspy.core.trace.decimate if mod(sampling_rate) == 0. 
-    :type stream:`~obspy.core.trace.Stream` or `~obspy.core.trace.Trace` object.
-    :type freq: float
-    :param freq: Frequency to which waveforms in stream are downsampled
-    :return: Downsampled trace or stream object
-    :rtype: `~obspy.core.trace.Trace` or `~obspy.core.trace.Trace` object.
-    """
-    
-    # get sampling rate 
-    if type(stream) == obspy.core.stream.Stream:
-        sampling_rate = stream[0].stats.sampling_rate
-    elif type(stream) == obspy.core.trace.Trace:
-        sampling_rate = stream.stats.sampling_rate
-
-    if sampling_rate == freq:
-        pass
-    else:
-        stream.interpolate(freq,method="weighted_average_slopes")	
-
-    return stream
-
 
 def remove_resp(arr,stats,inv):
     """
@@ -1165,52 +1140,6 @@ def calc_distance(sta1,sta2):
     dist /= 1000.
     return dist,azi,baz
 
-
-def getGaps(stream, min_gap=None, max_gap=None):
-    # Create shallow copy of the traces to be able to sort them later on.
-    copied_traces = copy.copy(stream.traces)
-    stream.sort()
-    gap_list = []
-    for _i in range(len(stream.traces) - 1):
-        # skip traces with different network, station, location or channel
-        if stream.traces[_i].id != stream.traces[_i + 1].id:
-            continue
-        # different sampling rates should always result in a gap or overlap
-        if stream.traces[_i].stats.delta == stream.traces[_i + 1].stats.delta:
-            flag = True
-        else:
-            flag = False
-        stats = stream.traces[_i].stats
-        stime = stats['endtime']
-        etime = stream.traces[_i + 1].stats['starttime']
-        delta = etime.timestamp - stime.timestamp
-        # Check that any overlap is not larger than the trace coverage
-        if delta < 0:
-            temp = stream.traces[_i + 1].stats['endtime'].timestamp - \
-                etime.timestamp
-            if (delta * -1) > temp:
-                delta = -1 * temp
-        # Check gap/overlap criteria
-        if min_gap and delta < min_gap:
-            continue
-        if max_gap and delta > max_gap:
-            continue
-        # Number of missing samples
-        nsamples = int(round(np.abs(delta) * stats['sampling_rate']))
-        # skip if is equal to delta (1 / sampling rate)
-        if flag and nsamples == 1:
-            continue
-        elif delta > 0:
-            nsamples -= 1
-        else:
-            nsamples += 1
-        gap_list.append([_i, _i+1,
-                        stats['network'], stats['station'],
-                        stats['location'], stats['channel'],
-                        stime, etime, delta, nsamples])
-    # Set the original traces to not alter the stream object.
-    stream.traces = copied_traces
-    return gap_list		
 
 def fft_parameters(dt,cc_len,source,source_times, source_params,locs,component,Nfft,Nt):
     """ 
