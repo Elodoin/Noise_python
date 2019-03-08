@@ -37,10 +37,10 @@ respdir = os.path.join(rootpath,'instrument/resp_all/resp_spectrum_20Hz')
 
 #-----boolen parameters------
 prepro   =True              #preprocess the data?
-to_whiten=False             #whiten the spectrum?
-time_norm=False             #normalize in time?
-asdf     =False
-hdf5     =True
+to_whiten=True              #whiten the spectrum?
+time_norm=True              #normalize in time?
+asdf     =True
+hdf5     =False
 flag     =False             #print intermediate variables and computing time
 
 checkt  = True              #check for traces with points bewtween sample intervals
@@ -54,7 +54,7 @@ cc_len=3600
 step=1800
 freqmin=0.05  
 freqmax=4
-norm_type='running_mean'
+norm_type='one_bit'
 
 
 #---------MPI-----------
@@ -127,6 +127,8 @@ for ista in range (rank,splits+size-extra,size):
                 if prepro:
                     t0=time.time()
                     source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,respdir)
+                    if len(source)==0:
+                        continue
                     t1=time.time()
                     if flag:
                         print("prepro takes %f s" % (t1-t0))

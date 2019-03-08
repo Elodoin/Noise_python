@@ -649,10 +649,17 @@ def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
     '''
     provide the parameters for computting CC later
     '''
-    dist = get_distance(lonS,latS,lonR,latR)
+    #dist = get_distance(lonS,latS,lonR,latR)
+    dist,azi,baz = obspy.geodetics.base.gps2dist_azimuth(latS,lonS,latR,lonR)
     parameters = {'dt':dt,
-        'dist':dist,
         'lag':maxlag,
+        'dist':dist/1000,
+        'azi':azi,
+        'baz':baz,
+        'lonS':lonS,
+        'latS':latS,
+        'lonR':lonR,
+        'latR':latR,
         'method':method}
     return parameters
 
@@ -685,62 +692,6 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cros
     ncorr = ncorr[ind]
     
     return ncorr
-
-def correlate(fft1,fft2, maxlag,dt, Nfft, method="cross-correlation"):
-    """This function takes ndimensional *data* array, computes the cross-correlation in the frequency domain
-    and returns the cross-correlation function between [-*maxlag*:*maxlag*].
-
-    :type fft1: :class:`numpy.ndarray`
-    :param fft1: This array contains the fft of each timeseries to be cross-correlated.
-    :type maxlag: int
-    :param maxlag: This number defines the number of samples (N=2*maxlag + 1) of the CCF that will be returned.
-
-    :rtype: :class:`numpy.ndarray`
-    :returns: The cross-correlation function between [-maxlag:maxlag]
-    """
-    # Speed up FFT by padding to optimal size for FFTPACK
-    t0=time.time()
-    if fft1.ndim == 1:
-        axis = 0
-        nwin=1
-    elif fft1.ndim == 2:
-        axis = 1
-        nwin= int(fft1.shape[0])
-
-    corr=np.zeros(shape=(nwin,Nfft),dtype=np.complex64)
-    corr[:,:Nfft//2]  = np.conj(fft1) * fft2
-
-    if method == 'deconv':
-        ind = np.where(np.abs(fft1)>0)
-        corr[ind] /= moving_ave(np.abs(fft1[ind]),10)**2
-        #corr[ind] /= running_abs_mean(np.abs(fft1[ind]),10) ** 2
-    elif method == 'coherence':
-        ind = np.where(np.abs(fft1)>0)
-        corr[ind] /= running_abs_mean(np.abs(fft1[ind]),5)
-        ind = np.where(np.abs(fft2)>0)
-        corr[ind] /= running_abs_mean(np.abs(fft2[ind]),5)
-    elif method == 'raw':
-        ind = 1
-
-    #--------------------problems: [::-1] only flips along axis=0 direction------------------------
-    #corr[:,-(Nfft // 2):] = corr[:,:(Nfft // 2)].conjugate()[::-1] # fill in the complex conjugate
-    #----------------------------------------------------------------------------------------------
-    corr[:,0] = complex(0,0)
-    corr[:,-(Nfft//2)+1:]=np.flip(np.conj(corr[:,1:(Nfft//2)]),axis=axis)
-    corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(corr, Nfft, axis=axis)))
-
-    tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt
-    ind = np.where(np.abs(tcorr) <= maxlag)[0]
-    if axis == 1:
-        corr = corr[:,ind]
-    else:
-        corr = corr[ind]
-    tcorr=tcorr[ind]
-
-    t1=time.time()
-    print('original takes '+str(t1-t0))
-    return corr,tcorr
-
 
 @jit('float32[:](float32[:],int16)')
 def moving_ave(A,N):

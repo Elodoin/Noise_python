@@ -1,38 +1,27 @@
 import os
 import glob
 import sys
-import obspy
 import time
 import noise_module
 import numpy as np
-import pandas as pd
-from obspy.io.sac.sactrace import SACTrace
 import pyasdf
 from mpi4py import MPI
 
 t0=time.time()
-#----------some common variables here----------
-#CCFDIR = '/n/flashlfs/mdenolle/KANTO/DATA/CCF_deconv'
-#CCFDIR = '/n/regal/denolle_lab/cjiang/CCF'
-#STACKDIR = '/n/flashlfs/mdenolle/KANTO/DATA/STACK_deconv'
-#STACKDIR = '/n/regal/denolle_lab/cjiang/STACK'
-#locations = '/n/home13/chengxin/cases/KANTO/locations.txt'
 
-rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO'
-CCFDIR = os.path.join(rootpath,'CCF')
-locations = os.path.join(rootpath,'locations_small.txt')
+#-------------absolute path of working directory-------------
+rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
+CCFDIR = os.path.join(rootpath,'CCF/test')
+FFTDIR = os.path.join(rootpath,'FFT')
 STACKDIR = os.path.join(rootpath,'STACK')
 
-flag = False
-ssac = True
-sasdf= True
-maxlag = 1800
+#---common variables---
+stack_days = 2
+flag = True
+maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
-comp1 = ['EHE','EHN','EHZ']
-comp2 = ['HNE','HNN','HNU']
-#comp1 = ['BHE','BHN','BHZ']
-#comp2 = ['BHE','BHN','BHZ']
+all_components = ['EE','EN','EZ','NE','NN','NZ','ZE','ZN','ZZ']
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -45,26 +34,32 @@ if rank == 0:
     if os.path.exists(STACKDIR)==False:
         os.mkdir(STACKDIR)
 
-    #-----other variables to share-----
-    locs = pd.read_csv(locations)
-    sta  = list(locs.iloc[:]['station'])
+    #------keep same order as S2--------
+    sfiles = sorted(glob.glob(os.path.join(FFTDIR,'*.h5')))
+    sta = []
+    for ifile in sfiles:
+        temp = ifile.split('/')[-1]
+        ista = temp.split('.')[1]
+        inet = temp.split('.')[0]
 
-    for ista in sta:
-        if not os.path.exists(os.path.join(STACKDIR,ista)):
-            os.mkdir(os.path.join(STACKDIR,ista))
+        #--------make directory for storing stacked data------------
+        if not os.path.exists(os.path.join(STACKDIR,inet+'.'+ista)):
+            os.mkdir(os.path.join(STACKDIR,inet+'.'+ista))
+        sta.append(inet+'.'+ista)
 
     #-------make station pairs based on list--------        
     pairs= noise_module.get_station_pairs(sta)
-    ccfs = glob.glob(os.path.join(CCFDIR,'*.h5'))
+    ccfs = sorted(glob.glob(os.path.join(CCFDIR,'*.h5')))
     splits = len(pairs)
 else:
-    locs,pairs,ccfs,splits=[None for _ in range(4)]
+    pairs,ccfs,splits=[None for _ in range(3)]
 
-locs   = comm.bcast(locs,root=0)
+#---------broadcast-------------
 pairs  = comm.bcast(pairs,root=0)
 ccfs   = comm.bcast(ccfs,root=0)
 splits = comm.bcast(splits,root=0)
 extra  = splits % size
+
 
 #-----loop I: source stations------
 for ii in range(rank,splits+size-extra,size):
@@ -72,87 +67,128 @@ for ii in range(rank,splits+size-extra,size):
     if ii<splits:
 
         source,receiver = pairs[ii][0],pairs[ii][1]
-        sta  = list(locs.iloc[:]['station'])
-        ncorr = np.zeros((9,int(2*maxlag/dt)+1),dtype=np.float32)
-        nflag = np.zeros(9,dtype=np.int16)
 
-        #-------just loop through each day-----
+        #----corr records every 10 days; ncorr records all days----
+        corr  = np.zeros((len(all_components),int(2*maxlag/dt)+1),dtype=np.float32)
+        ncorr = np.zeros((len(all_components),int(2*maxlag/dt)+1),dtype=np.float32)
+        num1  = np.zeros(len(all_components),dtype=np.int16)
+        num2  = np.zeros(len(all_components),dtype=np.int16)
+
+        #-----source information-----
+        staS = source.split('.')[1]
+        netS = source.split('.')[0]
+
+        #-----receiver information------
+        staR = receiver.split('.')[1]
+        netR = receiver.split('.')[0]
+        data_type = netS+'s'+staS+'s'+netR+'s'+staR
+
+        date_s = ccfs[0].split('/')[-1].split('.')[0]
+
+        #-------loop through each day-------
         for iday in range(len(ccfs)):
             if flag:
                 print("work on source %s receiver %s at day %s" % (source, receiver,ccfs[iday]))
 
-            #-----a flag to find comp info for S+R------
-            if iday==0:
-
-                #----source information-----
-                indx = sta.index(source)
-                slat = locs.iloc[indx]['latitude']
-                slon = locs.iloc[indx]['longitude']
-                netS = locs.iloc[indx]['network']
-                if netS == 'E' or netS == 'OK':
-                    compS = comp2
-                else:
-                    compS = comp1
-
-                #-----receiver information------
-                indx = sta.index(receiver)
-                rlat = locs.iloc[indx]['latitude']
-                rlon = locs.iloc[indx]['longitude']
-                netR = locs.iloc[indx]['network']
-                if netR == 'E' or netR == 'OK':
-                    compR = comp2
-                else:
-                    compR = comp1
-
-                if flag:
-                    print("first day to get source and receiver information")
-
             fft_h5 = ccfs[iday]
             with pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r') as ds:
 
-                #-------find the data types for source A--------
+                #-------data types for source A--------
                 data_types = ds.auxiliary_data.list()
+                if data_type in data_types:
+                    if flag:
+                        print('found the station-pair at %dth day' % iday)
+
+                    cross_comps = ds.auxiliary_data[data_type].list()
+                    parameters  = ds.auxiliary_data[data_type][cross_comps[0]].parameters
                 
-                for icompS in range(len(compS)):
-                    sfile = netS+'s'+source+'s'+compS[icompS]
-                    if flag:
-                        print("work on source %s" % sfile)
-                    
-                    if sfile in data_types:
-                        indxS = data_types.index(sfile)
-                        dtype  = data_types[indxS]
-                        path_list = ds.auxiliary_data[dtype].list()
+                    #----loop through all cross components-----
+                    for icomp in cross_comps:
+                        comp1 = icomp.split('_')[0]
+                        comp2 = icomp.split('_')[1]
 
-                        for icompR in range(len(compR)):
-                            rfile = netR+'s'+receiver+'s'+compR[icompR]
+                        #-----in case Z direction is labeled as U-----
+                        if comp1[-1]=='U':
+                            if comp2[-1]=='E':
+                                ccomp = 'ZE'
+                            elif comp2[-1]=='N':
+                                ccomp = 'ZN'
+                            else:
+                                ccomp = 'ZZ'
+                        else:
+                            if comp2[-1]=='U':
+                                ccomp = comp1[-1]+'Z'
+                            else:
+                                ccomp = comp1[-1]+comp2[-1]
+                        
+                        if flag:
+                            print("cross component of %s" % ccomp)
 
-                            if flag:
-                                print("work on receiver %s" % rfile)
-                            
-                            if rfile in path_list:
-                                indxR = path_list.index(rfile)
-                                tindx  = icompS*3+icompR
-                                ncorr[tindx,:] += ds.auxiliary_data[dtype][path_list[indxR]].data[:]
-                                nflag[tindx] += 1
+                        #------put into a 2D matrix----------
+                        tindx  = all_components.index(ccomp)
+                        corr[tindx,:] += ds.auxiliary_data[data_type][icomp].data[:]
+                        num1[tindx]   += 1
 
-                                if flag:
-                                    print("stacked for day %s" % rfile)
-    
-        #------------------save two stacked traces into SAC files-----------------
-        for icompS in range(len(compS)):
-            for icompR in range(len(compR)):
-                if nflag[icompS*3+icompR] >0:
-                    temp = netS+'.'+source+'_'+netR+'.'+receiver+'_'+compS[icompS]+'_'+compR[icompR]+'.SAC'
-                    filename = os.path.join(STACKDIR,source,temp)
-                    sac = SACTrace(nzyear=2000,nzjday=1,nzhour=0,nzmin=0,nzsec=0,nzmsec=0,b=-maxlag,\
-                        delta=dt,stla=rlat,stlo=rlon,evla=slat,evlo=slon,data=ncorr[icompS*3+icompR,:])
-                    sac.write(filename,byteorder='big')
-                    if flag:
-                        print("wrote to %s" % temp)
+            #------stack every n(10) day data-----
+            if iday>0 and iday%stack_days==0:
+                if flag:
+                    print("write the %d days' stacking into ADSF files" % stack_days)
+                date_e = ccfs[iday].split('/')[-1].split('.')[0]
+
+                stack_h5 = os.path.join(STACKDIR,source+'/'+source+'_'+receiver+'.h5')
+                crap   = np.zeros(int(2*maxlag/dt)+1,dtype=np.float32)
+
+                #-------in case it already exist------
+                if not os.path.isfile(stack_h5):
+                    with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
+                        pass 
+
+                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
+                    for ii in range(len(all_components)):
+                        icomp = all_components[ii]
+
+                        #------do average here-----
+                        if num1[ii]==0:
+                            print('station-pair %s_%s no data in %d days for components %s: filling zero' % (source,receiver,stack_days,icomp))
+                        else:
+                            corr[ii,:] = corr[ii,:]/num1[ii]
+                            ncorr[ii,:] += corr[ii,:]
+                            num2[ii]    += 1
+
+                        #------save the time domain cross-correlation functions-----
+                        data_type = str(date_s.replace('_',''))+'T'+str(date_e.replace('_',''))
+                        path = icomp
+                        crap = corr[ii,:]
+                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+
+                        #----reset----
+                        corr[ii,:] = 0
+                        num1[ii]   = 0
+                        
+                date_s = ccfs[iday+1].split('/')[-1].split('.')[0]
+
+        #------------now for the stacking of all days------------
+        with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
+            for ii in range(len(all_components)):
+                icomp = all_components[ii]
+
+                #------do average here--------
+                if num2[ii]==0:
+                    print('station-pair %s_%s no data in at all for components %s: filling zero' % (source,receiver,icomp))
+                else:
+                    ncorr[ii,:] = ncorr[ii,:]/num2[ii]
+
+                #------save the time domain cross-correlation functions-----
+                data_type = 'all_stacked'
+                path = icomp
+                crap = ncorr[ii,:]
+                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+
 
 t1=time.time()
 print('S3 takes '+str(t1-t0)+' s')
 
+#---ready to exit---
 comm.barrier()
 if rank == 0:
     sys.exit()

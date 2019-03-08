@@ -26,6 +26,8 @@ for lon, lat information, 3) add new parameters to HDF5 files needed for later C
 in the same format (Feb.15.2019). 
 
 add the functionality of auto-correlations (Feb.22.2019). Note that the auto-cc is normalizing each station to its Z comp.
+
+modify the structure of ASDF files to make it more flexable for later stacking and matrix rotation (Mar.06.2019)
 '''
 
 ttt0=time.time()
@@ -42,10 +44,10 @@ downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
 step=1800
-maxlag=1800
+maxlag=800
 method='deconv'
-start_date = '2010_12_16'
-end_date   = '2010_12_17'
+start_date = '2010_12_19'
+end_date   = '2010_12_25'
 inc_days   = 1
 
 if auto_corr and method=='coherence':
@@ -79,7 +81,7 @@ for ii in range(rank,splits+size-extra,size):
     if ii<splits:
         iday = day[ii]
 
-        t10 = time.time()
+        tt0 = time.time()
         #------loop I of each source-----
         for isource in range(len(sfiles)-1):
             source = sfiles[isource]
@@ -88,7 +90,7 @@ for ii in range(rank,splits+size-extra,size):
             if flag:
                 print('source: %s %s' % (staS,netS))
 
-            with pyasdf.ASDFDataSet(source, mpi=False, mode='r') as fft_ds_s:
+            with pyasdf.ASDFDataSet(source,mode='r') as fft_ds_s:
 
                 #-------get lon and lat information from inventory--------
                 temp = fft_ds_s.waveforms.list()
@@ -168,7 +170,7 @@ for ii in range(rank,splits+size-extra,size):
                             if flag:
                                 print('receiver: %s %s' % (staR,netR))
                             
-                            with pyasdf.ASDFDataSet(receiver, mpi=False, mode='r') as fft_ds_r:
+                            with pyasdf.ASDFDataSet(receiver, mode='r') as fft_ds_r:
 
                                 #-------get lon and lat information from inventory--------
                                 temp = fft_ds_r.waveforms.list()
@@ -220,17 +222,17 @@ for ii in range(rank,splits+size-extra,size):
                                             parameters = noise_module.optimized_cc_parameters(dt,maxlag,str(method),lonS,latS,lonR,latR)
 
                                             #------save the time domain cross-correlation functions-----
-                                            path = netR+'s'+staR+'s'+data_type_r
-                                            new_data_type = netS+'s'+staS+'s'+data_type_s
+                                            data_type = netS+'s'+staS+'s'+netR+'s'+staR
+                                            path = data_type_s+'_'+data_type_r
                                             crap = corr
-                                            ccf_ds.add_auxiliary_data(data=crap, data_type=new_data_type, path=path, parameters=parameters)
+                                            ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
                                         t8=time.time()
                                         if flag:
                                             print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t5-t4),(t7-t6),(t8-t7)))
-
-        t11 = time.time()
-        print('it takes %6.4fs to process one day in step 2' % (t11-t10))
+            
+        tt1 = time.time()
+        print('it takes %6.4fs to process one day in step 2' % (tt1-tt0))
 
 
 ttt1=time.time()
