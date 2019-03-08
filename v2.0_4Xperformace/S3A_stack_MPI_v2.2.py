@@ -11,17 +11,22 @@ t0=time.time()
 
 #-------------absolute path of working directory-------------
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
-CCFDIR = os.path.join(rootpath,'CCF/test')
+CCFDIR = os.path.join(rootpath,'CCF')
 FFTDIR = os.path.join(rootpath,'FFT')
 STACKDIR = os.path.join(rootpath,'STACK')
 
 #---common variables---
 stack_days = 2
 flag = True
+one_component = False
 maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
-all_components = ['EE','EN','EZ','NE','NN','NZ','ZE','ZN','ZZ']
+
+if not one_component:
+    all_components = ['EE','EN','EZ','NE','NN','NZ','ZE','ZN','ZZ']
+else:
+    all_components = ['ZZ']
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -81,64 +86,67 @@ for ii in range(rank,splits+size-extra,size):
         #-----receiver information------
         staR = receiver.split('.')[1]
         netR = receiver.split('.')[0]
-        data_type = netS+'s'+staS+'s'+netR+'s'+staR
 
+        #------keep a track of the starting date-----
         date_s = ccfs[0].split('/')[-1].split('.')[0]
+        date_s = date_s.replace('_','')
 
-        #-------loop through each day-------
+        #-----loop through each day----
         for iday in range(len(ccfs)):
             if flag:
-                print("work on source %s receiver %s at day %s" % (source, receiver,ccfs[iday]))
+                print("source %s receiver %s at day %s" % (source,receiver,ccfs[iday].split('/')[-1]))
 
             fft_h5 = ccfs[iday]
             with pyasdf.ASDFDataSet(fft_h5,mpi=False,mode='r') as ds:
 
                 #-------data types for source A--------
                 data_types = ds.auxiliary_data.list()
-                if data_type in data_types:
+                slist = np.array([s for s in data_types if staS in s])
+
+                #---in case no such source-----
+                if len(slist)==0:
+                    print("no source %s at %dth day! continue" % (staS,iday))
+                    continue
+
+                for data_type in slist:
+                    paths = ds.auxiliary_data[data_type].list()
+
+                    #-------find the correspoinding receiver--------
+                    rlist = np.array([r for r in paths if staR in r])
+                    if len(rlist)==0:
+                        print("no receiver %s for source %s at %dth day! continue" % (staR,staS,iday))
+                        continue
+
                     if flag:
                         print('found the station-pair at %dth day' % iday)
 
-                    cross_comps = ds.auxiliary_data[data_type].list()
-                    parameters  = ds.auxiliary_data[data_type][cross_comps[0]].parameters
-                
-                    #----loop through all cross components-----
-                    for icomp in cross_comps:
-                        comp1 = icomp.split('_')[0]
-                        comp2 = icomp.split('_')[1]
+                    #----------------copy the parameter information---------------
+                    parameters  = ds.auxiliary_data[data_type][paths[0]].parameters
+                    for path in paths:
 
-                        #-----in case Z direction is labeled as U-----
-                        if comp1[-1]=='U':
-                            if comp2[-1]=='E':
-                                ccomp = 'ZE'
-                            elif comp2[-1]=='N':
-                                ccomp = 'ZN'
-                            else:
-                                ccomp = 'ZZ'
-                        else:
-                            if comp2[-1]=='U':
-                                ccomp = comp1[-1]+'Z'
-                            else:
-                                ccomp = comp1[-1]+comp2[-1]
-                        
-                        if flag:
-                            print("cross component of %s" % ccomp)
+                        #--------cross component-------
+                        ccomp = data_type[-1]+path[-1]
 
                         #------put into a 2D matrix----------
                         tindx  = all_components.index(ccomp)
-                        corr[tindx,:] += ds.auxiliary_data[data_type][icomp].data[:]
+                        corr[tindx,:] += ds.auxiliary_data[data_type][path].data[:]
                         num1[tindx]   += 1
 
-            #------stack every n(10) day data-----
-            if iday>0 and iday%stack_days==0:
-                if flag:
-                    print("write the %d days' stacking into ADSF files" % stack_days)
-                date_e = ccfs[iday].split('/')[-1].split('.')[0]
+            #------stack every n(10) day or what is left-------
+            if (iday>0 and iday%stack_days==0) or iday==len(ccfs):
 
+                #------keep a track of ending date for stacking------
+                date_e = ccfs[iday-1].split('/')[-1].split('.')[0]
+                date_e = date_e.replace('_','')
+
+                if flag:
+                    print('write the stacked data to ASDF between %s and %s' % (date_s,date_e))
+
+                #------------------output path and file name----------------------
                 stack_h5 = os.path.join(STACKDIR,source+'/'+source+'_'+receiver+'.h5')
                 crap   = np.zeros(int(2*maxlag/dt)+1,dtype=np.float32)
 
-                #-------in case it already exist------
+                #------in case it already exist------
                 if not os.path.isfile(stack_h5):
                     with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
                         pass 
@@ -147,7 +155,7 @@ for ii in range(rank,splits+size-extra,size):
                     for ii in range(len(all_components)):
                         icomp = all_components[ii]
 
-                        #------do average here-----
+                        #------do average-----
                         if num1[ii]==0:
                             print('station-pair %s_%s no data in %d days for components %s: filling zero' % (source,receiver,stack_days,icomp))
                         else:
@@ -156,7 +164,7 @@ for ii in range(rank,splits+size-extra,size):
                             num2[ii]    += 1
 
                         #------save the time domain cross-correlation functions-----
-                        data_type = str(date_s.replace('_',''))+'T'+str(date_e.replace('_',''))
+                        data_type = 'F'+date_s+'T'+date_e
                         path = icomp
                         crap = corr[ii,:]
                         stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
@@ -165,9 +173,10 @@ for ii in range(rank,splits+size-extra,size):
                         corr[ii,:] = 0
                         num1[ii]   = 0
                         
-                date_s = ccfs[iday+1].split('/')[-1].split('.')[0]
+                date_s = ccfs[iday].split('/')[-1].split('.')[0]
+                date_s = date_s.replace('_','')
 
-        #------------now for the stacking of all days------------
+        #--------------now stack all of the days---------------
         with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
             for ii in range(len(all_components)):
                 icomp = all_components[ii]
@@ -179,7 +188,7 @@ for ii in range(rank,splits+size-extra,size):
                     ncorr[ii,:] = ncorr[ii,:]/num2[ii]
 
                 #------save the time domain cross-correlation functions-----
-                data_type = 'all_stacked'
+                data_type = 'Allstacked'
                 path = icomp
                 crap = ncorr[ii,:]
                 stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)

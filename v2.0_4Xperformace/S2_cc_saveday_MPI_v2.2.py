@@ -34,7 +34,7 @@ ttt0=time.time()
 
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
 FFTDIR = os.path.join(rootpath,'FFT')
-CCFDIR = os.path.join(rootpath,'CCF/test')
+CCFDIR = os.path.join(rootpath,'CCF')
 
 #-----some control parameters------
 flag=False              #output intermediate variables and computing times
@@ -46,8 +46,8 @@ cc_len=3600
 step=1800
 maxlag=800
 method='deconv'
-start_date = '2010_12_19'
-end_date   = '2010_12_25'
+start_date = '2010_12_16'
+end_date   = '2010_12_18'
 inc_days   = 1
 
 if auto_corr and method=='coherence':
@@ -221,9 +221,25 @@ for ii in range(rank,splits+size-extra,size):
                                         with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ccf_ds:
                                             parameters = noise_module.optimized_cc_parameters(dt,maxlag,str(method),lonS,latS,lonR,latR)
 
+                                            #-----------make a universal change to component-----------
+                                            if data_type_r[-1]=='U' or data_type_r[-1]=='Z':
+                                                compR = 'Z'
+                                            elif data_type_r[-1]=='E':
+                                                compR = 'E'
+                                            elif data_type_r[-1]=='N':
+                                                compR = 'N' 
+
+                                            if data_type_s[-1]=='U' or data_type_s[-1]=='Z':
+                                                compS = 'Z'
+                                            elif data_type_s[-1]=='E':
+                                                compS = 'E'
+                                            elif data_type_s[-1]=='N':
+                                                compS = 'N' 
+
                                             #------save the time domain cross-correlation functions-----
-                                            data_type = netS+'s'+staS+'s'+netR+'s'+staR
-                                            path = data_type_s+'_'+data_type_r
+                                            path = netR+'s'+staR+'s'+compR
+                                            data_type = netS+'s'+staS+'s'+compS
+
                                             crap = corr
                                             ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
