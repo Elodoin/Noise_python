@@ -23,6 +23,15 @@ maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
 
+#----parameters to estimate SNR----
+snr_parameters = {
+    'freqmin':0.08,
+    'freqmax':6,
+    'steps': 15,
+    'minvel': 0.5,
+    'maxvel': 10,
+    'noisewin':100}
+
 if not one_component:
     all_components = ['EE','EN','EZ','NE','NN','NZ','ZE','ZN','ZZ']
 else:
@@ -39,7 +48,7 @@ if rank == 0:
     if os.path.exists(STACKDIR)==False:
         os.mkdir(STACKDIR)
 
-    #------keep same order as S2--------
+    #------a way to keep same station-pair orders as S1-------
     sfiles = sorted(glob.glob(os.path.join(FFTDIR,'*.h5')))
     sta = []
     for ifile in sfiles:
@@ -130,13 +139,15 @@ for ii in range(rank,splits+size-extra,size):
                         #------put into a 2D matrix----------
                         tindx  = all_components.index(ccomp)
                         corr[tindx,:] += ds.auxiliary_data[data_type][path].data[:]
+                        ncorr[tindx,:]+= ds.auxiliary_data[data_type][path].data[:]
                         num1[tindx]   += 1
+                        num2[tindx]   += 1
 
-            #------stack every n(10) day or what is left-------
-            if (iday>0 and iday%stack_days==0) or iday==len(ccfs):
+            #------stack every n(10) day or whatever is left-------
+            if (iday>0 and iday%stack_days==1) or iday==len(ccfs)-1:
 
                 #------keep a track of ending date for stacking------
-                date_e = ccfs[iday-1].split('/')[-1].split('.')[0]
+                date_e = ccfs[iday].split('/')[-1].split('.')[0]
                 date_e = date_e.replace('_','')
 
                 if flag:
@@ -160,21 +171,23 @@ for ii in range(rank,splits+size-extra,size):
                             print('station-pair %s_%s no data in %d days for components %s: filling zero' % (source,receiver,stack_days,icomp))
                         else:
                             corr[ii,:] = corr[ii,:]/num1[ii]
-                            ncorr[ii,:] += corr[ii,:]
-                            num2[ii]    += 1
+
+                        #--------evaluate the SNR of the signal at target period range-------
+                        new_parameters = noise_module.get_SNR(corr[ii],snr_parameters,parameters)
 
                         #------save the time domain cross-correlation functions-----
                         data_type = 'F'+date_s+'T'+date_e
                         path = icomp
                         crap = corr[ii,:]
-                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
 
                         #----reset----
                         corr[ii,:] = 0
                         num1[ii]   = 0
-                        
-                date_s = ccfs[iday].split('/')[-1].split('.')[0]
-                date_s = date_s.replace('_','')
+
+                if iday != len(ccfs)-1:        
+                    date_s = ccfs[iday+1].split('/')[-1].split('.')[0]
+                    date_s = date_s.replace('_','')
 
         #--------------now stack all of the days---------------
         with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
@@ -186,12 +199,15 @@ for ii in range(rank,splits+size-extra,size):
                     print('station-pair %s_%s no data in at all for components %s: filling zero' % (source,receiver,icomp))
                 else:
                     ncorr[ii,:] = ncorr[ii,:]/num2[ii]
+                
+                #--------evaluate the SNR of the signal at target period range-------
+                new_parameters = noise_module.get_SNR(ncorr[ii],snr_parameters,parameters)
 
                 #------save the time domain cross-correlation functions-----
                 data_type = 'Allstacked'
                 path = icomp
                 crap = ncorr[ii,:]
-                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
 
 
 t1=time.time()

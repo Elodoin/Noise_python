@@ -1,6 +1,5 @@
 import os
 import glob
-import math
 import datetime
 import copy
 import time
@@ -441,8 +440,8 @@ def get_distance(lon1,lat1,lon2,lat2):
     dphi    = (lat2 - lat1)*pi/180
     dlambda = (lon2 - lon1)*pi/180
     
-    a = math.sin(dphi/2)**2+math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-    return 2*R*math.atan2(math.sqrt(a), math.sqrt(1 - a))/1000
+    a = np.sin(dphi/2)**2+np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
+    return 2*R*np.atan2(np.sqrt(a), np.sqrt(1 - a))/1000
 
 def get_coda_window(dist,vmin,maxlag,dt,wcoda):
     '''
@@ -652,14 +651,14 @@ def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
     #dist = get_distance(lonS,latS,lonR,latR)
     dist,azi,baz = obspy.geodetics.base.gps2dist_azimuth(latS,lonS,latR,lonR)
     parameters = {'dt':dt,
-        'lag':maxlag,
+        'lag':int(maxlag),
         'dist':dist/1000,
-        'azi':azi,
-        'baz':baz,
-        'lonS':lonS,
-        'latS':latS,
-        'lonR':lonR,
-        'latR':latR,
+        'azi':np.float32(azi),
+        'baz':np.float32(baz),
+        'lonS':np.float32(lonS),
+        'latS':np.float32(latS),
+        'lonR':np.float32(lonR),
+        'latR':np.float32(latR),
         'method':method}
     return parameters
 
@@ -715,6 +714,80 @@ def moving_ave(A,N):
         if B[pos]==0:
             B[pos]=1
     return B[N:-N]
+
+
+def get_SNR(corr,snr_parameters,parameters):
+    '''
+    estimate the SNR for the cross-correlation functions. the signal is defined
+    as the maxinum in the time window of [dist/max_vel,dist/min_vel]. the noise
+    is defined as the std of the trailing 100 s window. flag is to indicate to 
+    estimate both lags of the cross-correlation funciton of just the positive
+
+    corr: the noise cross-correlation functions
+    snr_parameters: dictionary for some parameters to estimate S-N
+    parameters: dictionary for parameters about the ccfs
+    '''
+    #---------common variables----------
+    sampling_rate = int(1/parameters['dt'])
+    npts = int(2*sampling_rate*parameters['lag'])
+    indx = npts//2
+    dist = parameters['dist']
+    minvel = snr_parameters['minvel']
+    maxvel = snr_parameters['maxvel']
+
+    #-----index to window the signal part------
+    indx_sig1 = int(dist/maxvel)*sampling_rate
+    indx_sig2 = int(dist/minvel)*sampling_rate
+    if maxvel > 5:
+        indx_sig1 = 0
+
+    #-------index to window the noise part---------
+    indx_noise1 = indx_sig2
+    indx_noise2 = indx_noise1+snr_parameters['noisewin']*sampling_rate
+
+    #----prepare the filters----
+    fb = snr_parameters['freqmin']
+    fe = snr_parameters['freqmax']
+    ns = snr_parameters['steps']
+    freq = np.zeros(ns,dtype=np.float32)
+    psnr = np.zeros(ns,dtype=np.float32)
+    nsnr = np.zeros(ns,dtype=np.float32)
+    ssnr = np.zeros(ns,dtype=np.float32)
+
+    #--------prepare frequency info----------
+    step = (np.log(fb)-np.log(fe))/(ns-1)
+    for ii in range(ns):
+        freq[ii]=np.exp(np.log(fe)+ii*step)
+
+    for ii in range(1,ns-1):
+        f2 = freq[ii-1]
+        f1 = freq[ii+1]
+        ncorr = bandpass(corr,f1,f2,sampling_rate,corners=4,zerophase=True)
+        psignal = max(ncorr[indx+indx_sig1:indx+indx_sig2])
+        nsignal = max(ncorr[indx-indx_sig2:indx-indx_sig1])
+        ssignal = max((ncorr[indx+indx_sig1:indx+indx_sig2]+np.flip(ncorr[indx-indx_sig2:indx-indx_sig1]))/2)
+        pnoise  = np.std(ncorr[indx+indx_noise1:indx+indx_noise2])
+        nnoise  = np.std(ncorr[indx-indx_noise2:indx-indx_noise1])
+        snoise  = np.std((ncorr[indx+indx_noise1:indx+indx_noise2]+np.flip(ncorr[indx-indx_noise2:indx-indx_noise1]))/2)
+        psnr[ii] = psignal/pnoise
+        nsnr[ii] = nsignal/nnoise
+        ssnr[ii] = ssignal/snoise
+
+        #------plot the signals-------
+        plt.figure(figsize=(16,3))
+        indx0 = 100*sampling_rate
+        tt = np.arange(-100*sampling_rate,100*sampling_rate+1)/sampling_rate
+        plt.plot(tt,ncorr[indx-indx0:indx+indx0+1],'k-',linewidth=0.6)
+        plt.title('psnr %4.1f nsnr %4.1f ssnr %4.1f' % (psnr[ii],nsnr[ii],ssnr[ii]))
+        plt.grid(True)
+        plt.show()
+
+    parameters['psnr'] = psnr[1:-1]
+    parameters['nsnr'] = nsnr[1:-1]
+    parameters['ssnr'] = nsnr[1:-1]
+    parameters['freq'] = freq[1:-1]
+
+    return parameters
 
 def nextpow2(x):
     """

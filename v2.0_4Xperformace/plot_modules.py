@@ -21,7 +21,10 @@ it includes:
     of the ccfs to compare the symmetry
 4). plot_cc_withtime(ccfdir,stackdir,freqmin,freqmax,net1,sta1,comp1,net2=None,sta2=None,comp2=None)
     to plot the ccfs of one station-pair at different days
-5). compare_c2_c3_waveforms(c2file,c3file,maxlag,c2_maxlag,dt)
+5). plot_ZH_pmotion(sfile,freqmin,freqmax,net1,sta1,net2=None,sta2=None) to show the R-Z cross components
+    as well as the particle motion to identify body-wave components
+6). 
+7). compare_c2_c3_waveforms(c2file,c3file,maxlag,c2_maxlag,dt)
 '''
 
 def plot_spectrum(sfile,iday,icomp):
@@ -153,7 +156,7 @@ def plot_moveout(sfile,freqmin,freqmax,net1=None,sta1=None,comp1=None):
                 plt.title('%s %s filtered @%4.1f-%4.1f Hz' % (sta1,comp1,freqmin,freqmax))
                 plt.xlabel('time (s)')
                 plt.ylabel('offset (km)')
-                plt.text(maxlag*0.9,dist,sta2,fontsize=6)
+                plt.text(maxlag*0.9,dist+0.5,sta2,fontsize=6)
 
                 #----use to plot o times------
                 if mdist < dist:
@@ -198,7 +201,7 @@ def plot_moveout(sfile,freqmin,freqmax,net1=None,sta1=None,comp1=None):
                 plt.title('%s %s filtered @%4.1f-%4.1f Hz' % (sta1,comp1,freqmin,freqmax))
                 plt.xlabel('time (s)')
                 plt.ylabel('offset (km)')
-                plt.text(maxlag*0.9,dist,sta2,fontsize=6)
+                plt.text(maxlag*0.9,dist+0.5,sta2,fontsize=6)
 
                 if mdist < dist:
                         mdist = dist
@@ -285,6 +288,8 @@ def plot_cc_withtime(ccfdir,stackdir,freqmin,freqmax,net1,sta1,comp1,net2=None,s
     plot the filtered cross-correlation functions between station-pair sta1-sta2
     for all of the available days stored in ccfdir
 
+    example: plot_cc_withtime('Mesonet_BW/CCF','Mesonet_BW/STACK/AYHM',1,5,'E','AYHM','HNU') or 
+    plot_cc_withtime('Mesonet_BW/CCF','Mesonet_BW/STACK/AYHM',1,5,'E','AYHM','HNU','E','BKKM','HNU')
     '''
     #---basic parameters----
     maxlag = 100
@@ -368,6 +373,7 @@ def plot_cc_withtime(ccfdir,stackdir,freqmin,freqmax,net1,sta1,comp1,net2=None,s
                            
                     plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2,'k-',linewidth=0.5)
                     plt.text(maxlag*0.9,ii*2,iday,fontsize=6)
+
             #----plot stacked one----
             sacfile = os.path.join(stackdir,net1+"."+sta1+"_"+net2+"."+sta2+"_"+comp1+"_"+comp2+".SAC")
             if os.path.isfile(sacfile):
@@ -525,6 +531,66 @@ def plot_ZH_pmotion(sfile,freqmin,freqmax,net1,sta1,net2=None,sta2=None):
             plt.plot(data3[indx0:indx0+tindx+1],data1[indx0:indx0+tindx+1],'k-',linewidth=0.5)
             plt.xlabel('RR');plt.ylabel('ZR')
             plt.show()
+
+
+def plot_multi_freq(sfile,freqmin,freqmax,nfreq,ccomp,tags=None):
+    '''
+    plot the stacked ccfs for sta1-sta2 at multi-frequency bands between freqmin-freqmax. 
+    this may be useful to show the dispersive property of the surface waves, which could 
+    be used together with plot_ZH_pmotion to identify surface wave components
+
+    example:
+    '''
+    #---basic parameters----
+    maxlag = 100
+
+    #------set path and type-------------
+    ds = pyasdf.ASDFDataSet(sfile,mode='r')
+    slist = ds.auxiliary_data.list()
+
+    #-----check tags information------
+    if not tags:
+        tags = "Allstacked"
+    
+    if tags not in slist:
+        raise ValueError('tags %s not in the file %s' % (tags,sfile))
+    
+    #--------read the data and parameters------------
+    parameters = ds.auxiliary_data[tags][ccomp].parameters
+    corr = ds.auxiliary_data[tags][ccomp].data[:]
+    sampling_rate = int(1/parameters['dt'])
+    npts = int(2*sampling_rate*parameters['lag'])
+    indx = npts//2
+    tt = np.arange(-maxlag*sampling_rate, maxlag*sampling_rate+1)/sampling_rate
+    
+    #------make frequency information-----
+    freq = np.zeros(nfreq,dtype=np.float32)
+    step = (np.log(freqmin)-np.log(freqmax))/(nfreq-1)
+    
+    for ii in range(nfreq):
+        freq[ii]=np.exp(np.log(freqmin)-ii*step)
+
+    indx0 = maxlag*sampling_rate
+    #----loop through each freq-----
+    for ii in range(1,nfreq-1):
+        if ii==1:
+            plt.figure(figsize=(9,6))
+
+        f1 = freq[ii-1]
+        f2 = freq[ii+1]
+        ncorr = bandpass(corr,f1,f2,sampling_rate,corners=4,zerophase=True)
+        ncorr = ncorr/max(ncorr)
+
+        #------plot the signals-------
+        plt.plot(tt,ncorr[indx-indx0:indx+indx0+1]+ii,'k-',linewidth=0.6)
+        ttext = '{0:4.2f}-{1:4.2f} Hz'.format(f1,f2)
+        plt.text(maxlag*0.9,ii+0.3,ttext,fontsize=6)
+        if ii==1:
+            plt.title('%s at %s component' % (sfile.split('/')[-1],ccomp))
+            plt.xlabel('time [s]')
+            plt.ylabel('waveform #')
+    plt.grid(True)
+    plt.show()
 
 
 def compare_c2_c3_waveforms(c2file,c3file,maxlag,c2_maxlag,dt):

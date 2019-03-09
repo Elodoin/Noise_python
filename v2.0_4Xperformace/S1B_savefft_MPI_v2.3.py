@@ -5,7 +5,6 @@ from datetime import datetime
 import numpy as np
 import scipy
 from scipy.fftpack.helper import next_fast_len
-from obspy.signal.filter import bandpass
 import obspy
 import matplotlib.pyplot as plt
 import noise_module

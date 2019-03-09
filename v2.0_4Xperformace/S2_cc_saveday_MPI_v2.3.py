@@ -44,10 +44,10 @@ downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
 step=1800
-maxlag=800
+maxlag=800              #enlarge this number if to do C3
 method='deconv'
 start_date = '2010_12_16'
-end_date   = '2010_12_18'
+end_date   = '2010_12_25'
 inc_days   = 1
 
 if auto_corr and method=='coherence':
