@@ -33,8 +33,8 @@ modify the structure of ASDF files to make it more flexable for later stacking a
 ttt0=time.time()
 
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
-FFTDIR = os.path.join(rootpath,'FFT')
-CCFDIR = os.path.join(rootpath,'CCF')
+FFTDIR = os.path.join(rootpath,'FFT/resp')
+CCFDIR = os.path.join(rootpath,'CCF/resp')
 
 #-----some control parameters------
 flag=False              #output intermediate variables and computing times
@@ -46,8 +46,8 @@ cc_len=3600
 step=1800
 maxlag=800              #enlarge this number if to do C3
 method='deconv'
-start_date = '2010_12_16'
-end_date   = '2010_12_25'
+start_date = '2010_12_06'
+end_date   = '2010_12_15'
 inc_days   = 1
 
 if auto_corr and method=='coherence':

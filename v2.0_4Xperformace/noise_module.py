@@ -652,7 +652,7 @@ def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
     dist,azi,baz = obspy.geodetics.base.gps2dist_azimuth(latS,lonS,latR,lonR)
     parameters = {'dt':dt,
         'lag':int(maxlag),
-        'dist':dist/1000,
+        'dist':np.float32(dist/1000),
         'azi':np.float32(azi),
         'baz':np.float32(baz),
         'lonS':np.float32(lonS),
@@ -762,6 +762,8 @@ def get_SNR(corr,snr_parameters,parameters):
     for ii in range(1,ns-1):
         f2 = freq[ii-1]
         f1 = freq[ii+1]
+
+        #-------------filter data before estimate SNR------------
         ncorr = bandpass(corr,f1,f2,sampling_rate,corners=4,zerophase=True)
         psignal = max(ncorr[indx+indx_sig1:indx+indx_sig2])
         nsignal = max(ncorr[indx-indx_sig2:indx-indx_sig1])
@@ -769,11 +771,19 @@ def get_SNR(corr,snr_parameters,parameters):
         pnoise  = np.std(ncorr[indx+indx_noise1:indx+indx_noise2])
         nnoise  = np.std(ncorr[indx-indx_noise2:indx-indx_noise1])
         snoise  = np.std((ncorr[indx+indx_noise1:indx+indx_noise2]+np.flip(ncorr[indx-indx_noise2:indx-indx_noise1]))/2)
-        psnr[ii] = psignal/pnoise
-        nsnr[ii] = nsignal/nnoise
-        ssnr[ii] = ssignal/snoise
+        
+        #------in case there is no data-------
+        if pnoise==0 or nnoise==0 or snoise==0:
+            psnr[ii]=0
+            nsnr[ii]=0
+            ssnr[ii]=0
+        else:
+            psnr[ii] = psignal/pnoise
+            nsnr[ii] = nsignal/nnoise
+            ssnr[ii] = ssignal/snoise
 
         #------plot the signals-------
+        '''
         plt.figure(figsize=(16,3))
         indx0 = 100*sampling_rate
         tt = np.arange(-100*sampling_rate,100*sampling_rate+1)/sampling_rate
@@ -781,6 +791,7 @@ def get_SNR(corr,snr_parameters,parameters):
         plt.title('psnr %4.1f nsnr %4.1f ssnr %4.1f' % (psnr[ii],nsnr[ii],ssnr[ii]))
         plt.grid(True)
         plt.show()
+        '''
 
     parameters['psnr'] = psnr[1:-1]
     parameters['nsnr'] = nsnr[1:-1]

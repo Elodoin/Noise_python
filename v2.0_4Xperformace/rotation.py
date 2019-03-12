@@ -23,7 +23,6 @@ CCFDIR   = os.path.join(rootpath,'CCF')
 STACKDIR = os.path.join(rootpath,'STACK')
 ROTDIR   = os.path.join(rootpath,'ROT')
 ccfs     = sorted(glob.glob(os.path.join(CCFDIR,'2010_12_17.h5')))
-locations = os.path.join(rootpath,'station.lst')
 
 #------------make correction due to mis-orientation of instruments---------------
 corrfile = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/rotation/meso_angles.dat'

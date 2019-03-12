@@ -32,8 +32,8 @@ lamin,lomin,lamax,lomax=42,-122,50,-120         # regional box: min lat, min lon
 chan='BH*'                                      # channel to download 
 net="XD"                                        # network to download
 sta="MD12"                                      # station to download
-start_date = '2016_07_13'
-end_date   = '2016_07_15'
+start_date = '2016_07_01'
+end_date   = '2016_07_05'
 inc_days   = 5                                  # number of days for each request
 
 checkt  = True                                  # check for traces with points bewtween sample intervals
