@@ -28,9 +28,9 @@ script of S1_savASDF_v2.2
 t00=time.time()
 
 rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
-FFTDIR = os.path.join(rootpath,'FFT/resp')
+FFTDIR = os.path.join(rootpath,'FFT')
 locations = os.path.join(rootpath,'station.lst')
-event = os.path.join(rootpath,'noise_data/Event_2010_*')
+event = os.path.join(rootpath,'noise_data/Event_2011_*')
 #--------think about how to simplify this----------
 respdir = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/instrument/resp_4types/resp_spect_20Hz'
 
@@ -43,7 +43,7 @@ hdf5     =False
 flag     =False             #print intermediate variables and computing time
 
 checkt  = True              #check for traces with points bewtween sample intervals
-resp    = 'spectrum'    
+resp    = False    
 
 #----more common variables---
 pre_filt=[0.04,0.05,6,8]

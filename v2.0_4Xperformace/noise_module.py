@@ -644,7 +644,7 @@ def C3_process(S1_data,S2_data,Nfft,win):
 
     return ccp,ccn
     
-def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
+def optimized_cc_parameters(dt,maxlag,method,nhours,lonS,latS,lonR,latR):
     '''
     provide the parameters for computting CC later
     '''
@@ -659,6 +659,7 @@ def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
         'latS':np.float32(latS),
         'lonR':np.float32(lonR),
         'latR':np.float32(latR),
+        'nhours':nhours,
         'method':method}
     return parameters
 
@@ -1201,10 +1202,10 @@ def fft_parameters(dt,cc_len,source,source_times, source_params,locs,component,N
     source_mad,source_std,source_nonzero = source_params[:,0],\
                          source_params[:,1],source_params[:,2]
     lon,lat,el=locs["longitude"],locs["latitude"],locs["elevation"]
-    starttime = source_times[:,0]
-    endtime = source_times[:,1]
+    #starttime = source_times[:,0]
+    #endtime = source_times[:,1]
     source = stats_to_dict(source,'source')
-    parameters = {'sampling_rate':dt,
+    parameters = {#'sampling_rate':dt,
              'twin':cc_len,
              'mad':source_mad,
              'std':source_std,
@@ -1213,8 +1214,8 @@ def fft_parameters(dt,cc_len,source,source_times, source_params,locs,component,N
              'latitude':lat,
              'elevation_in_m':el,
              'component':component,
-             'starttime':starttime,
-             'endtime':endtime,
+             #'starttime':starttime,
+             #'endtime':endtime,
              'nfft':Nfft,
              'nseg':Nt}
     parameters.update(source)

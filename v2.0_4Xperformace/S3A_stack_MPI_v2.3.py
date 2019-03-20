@@ -45,7 +45,7 @@ snr_parameters = {
     'freqmax':6,
     'steps': 15,
     'minvel': 0.5,
-    'maxvel': 10,
+    'maxvel': 3.5,
     'noisewin':100}
 
 #--------------9-component Green's tensor------------------
