@@ -50,7 +50,7 @@ step=1800
 maxlag=800              #enlarge this number if to do C3
 method='deconv'
 start_date = '2011_03_01'
-end_date   = '2011_03_25'
+end_date   = '2011_03_02'
 inc_days   = 1
 
 if auto_corr and method=='coherence':
@@ -95,7 +95,7 @@ for ii in range(rank,splits+size-extra,size):
         nsta  = len(sfiles)
 
         #----double check the ncomp parameters by opening a few stations------
-        for ii in range(1,4):
+        for jj in range(1,4):
             with pyasdf.ASDFDataSet(sfiles[ii],mpi=False,mode='r') as ds:
                 data_types = ds.auxiliary_data.list()
                 if len(data_types) > ncomp:
@@ -156,6 +156,9 @@ for ii in range(rank,splits+size-extra,size):
                                 if flag:
                                     print('find %dth data chunck for station %s day %s' % (iseg,tfile.split('/')[-1],iday))
                                 indx = ifile*ncomp+iindx
+                                #-----check bound----
+                                if indx > nsta*ncomp:
+                                    raise ValueError('index out of bound')
                                 data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
                                 cc_array[indx][:]= data.reshape(data.size)
                                 std   = ds.auxiliary_data[icomp][iday].parameters['std']
@@ -163,13 +166,17 @@ for ii in range(rank,splits+size-extra,size):
                     else:
 
                         #-----good orders when all components are available-----
-                        for ii in range(len(data_types)):
-                            icomp = data_types[ii]
+                        for jj in range(len(data_types)):
+                            icomp = data_types[jj]
                             tpaths = ds.auxiliary_data[icomp].list()
                             if iday in tpaths:
                                 if flag:
                                     print('find %dth data chunck for station %s day %s' % (iseg,tfile.split('/')[-1],iday))
-                                indx = ifile*ncomp+ii
+                                indx = ifile*ncomp+jj
+                                
+                                #-----check bound----
+                                if indx > nsta*ncomp:
+                                    raise ValueError('index out of bound')
                                 data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
                                 cc_array[indx][:]= data.reshape(data.size)
                                 std   = ds.auxiliary_data[icomp][iday].parameters['std']

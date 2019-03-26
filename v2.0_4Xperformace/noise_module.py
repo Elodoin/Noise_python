@@ -659,7 +659,7 @@ def optimized_cc_parameters(dt,maxlag,method,nhours,lonS,latS,lonR,latR):
         'latS':np.float32(latS),
         'lonR':np.float32(lonR),
         'latR':np.float32(latR),
-        'nhours':nhours,
+        'ngood':nhours,
         'method':method}
     return parameters
 
@@ -684,7 +684,6 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cros
     ncorr = np.zeros(shape=Nfft,dtype=np.complex64)
     ncorr[:Nfft//2] = np.mean(corr,axis=0)
     ncorr[-(Nfft//2)+1:]=np.flip(np.conj(ncorr[1:(Nfft//2)]),axis=0)
-    ncorr[0]=complex(0,0)
     ncorr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(ncorr, Nfft, axis=0)))
 
     tcorr = np.arange(-Nfft//2 + 1, Nfft//2)*dt

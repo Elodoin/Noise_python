@@ -338,7 +338,7 @@ def plot_cc_2lags(sfile,freqmin,freqmax,net1,sta1,comp1,net2=None,sta2=None,comp
                 plt.show()
 
 
-def plot_cc_withtime(ccfdir,freqmin,freqmax,net1,sta1,comp1,stackdir=None,net2=None,sta2=None,comp2=None):
+def plot_cc_withtime(ccfdir,freqmin,freqmax,net1,sta1,comp1,net2=None,sta2=None,comp2=None,stackdir=None):
     '''
     plot the filtered cross-correlation functions between station-pair sta1-sta2
     for all of the available days stored in ccfdir
@@ -366,6 +366,7 @@ def plot_cc_withtime(ccfdir,freqmin,freqmax,net1,sta1,comp1,stackdir=None,net2=N
                 plt.figure(figsize=(9,6))
 
             with pyasdf.ASDFDataSet(afiles[ii],mode='r') as ds:
+                #print(afiles[ii],source,recever)
                 dist = ds.auxiliary_data[source][recever].parameters['dist']
                 iday = afiles[ii].split('/')[-1].split('.')[0]
                 data = ds.auxiliary_data[source][recever].data[:]
@@ -473,8 +474,8 @@ def plot_cc_withtime_stack(ccffile,freqmin,freqmax,ccomp,maxlag=None):
             #-----loop through each day-----
             slist = ds.auxiliary_data.list()
 
-            for ii in range(1,len(slist)):
-                if ii%50==0:
+            for ii in range(len(slist)):
+                if ii%60==0:
                     plt.figure(figsize=(9,6))
 
                 iday = slist[ii]
@@ -487,18 +488,22 @@ def plot_cc_withtime_stack(ccffile,freqmin,freqmax,ccomp,maxlag=None):
                 #----make index----
                 indx0 = npts//2
                 tindx = int(maxlag/dt)
-                plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2,'k-',linewidth=0.5)
+                if ii==0:
+                    color = 'b-'
+                else:
+                    color = 'k-'
+                plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2,color,linewidth=0.5)
                 plt.text(maxlag*0.7,ii*2,iday,fontsize=6)
 
             plt.grid(True)
-            data = ds.auxiliary_data['Allstacked'][ccomp].data[:]
-            data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
-            data = data/max(data)
-            indx0= len(data)//2
-            plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2+2,'b-',linewidth=1)
-            plt.plot(tt,data[indx0-tindx:indx0+tindx+1],'b-',linewidth=1)
+            #data = ds.auxiliary_data['Allstacked'][ccomp].data[:]
+            #data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
+            #data = data/max(data)
+            #indx0= len(data)//2
+            #plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2+2,'b-',linewidth=1)
+            #plt.plot(tt,data[indx0-tindx:indx0+tindx+1],'b-',linewidth=1)
             #---------highlight zero time------------
-            plt.plot([0,0],[-2,ii*2+2],'r--',linewidth=1.5)
+            plt.plot([0,0],[0,ii*2],'r--',linewidth=1.5)
             plt.title('%s %s, dist:%6.1fkm @%4.1f-%4.1f Hz' % (ccffile.split('/')[-1],ccomp,dist,freqmin,freqmax))
             plt.xlabel('time [s]')
             plt.ylabel('days')

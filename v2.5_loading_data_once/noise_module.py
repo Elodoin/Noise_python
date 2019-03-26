@@ -644,7 +644,7 @@ def C3_process(S1_data,S2_data,Nfft,win):
 
     return ccp,ccn
     
-def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
+def optimized_cc_parameters(dt,maxlag,method,nhours,lonS,latS,lonR,latR):
     '''
     provide the parameters for computting CC later
     '''
@@ -659,6 +659,7 @@ def optimized_cc_parameters(dt,maxlag,method,lonS,latS,lonR,latR):
         'latS':np.float32(latS),
         'lonR':np.float32(lonR),
         'latR':np.float32(latR),
+        'ngood':nhours,
         'method':method}
     return parameters
 

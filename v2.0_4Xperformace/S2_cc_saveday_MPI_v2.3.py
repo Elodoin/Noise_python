@@ -46,7 +46,7 @@ cc_len=3600
 step=1800
 maxlag=800              #enlarge this number if to do C3
 method='deconv'
-start_date = '2011_03_01'
+start_date = '2011_03_14'
 end_date   = '2011_03_28'
 inc_days   = 1
 
@@ -219,7 +219,7 @@ for ii in range(rank,splits+size-extra,size):
                                                 pass 
 
                                         with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ccf_ds:
-                                            parameters = noise_module.optimized_cc_parameters(dt,maxlag,str(method),lonS,latS,lonR,latR)
+                                            parameters = noise_module.optimized_cc_parameters(dt,maxlag,str(method),len(bb),lonS,latS,lonR,latR)
 
                                             #-----------make a universal change to component-----------
                                             if data_type_r[-1]=='U' or data_type_r[-1]=='Z':

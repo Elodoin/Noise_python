@@ -32,7 +32,8 @@ angles   = list(locs.iloc[:]['angle'])
 flag = False
 do_rotation   = True
 one_component = False
-stack_days = 5
+stack_days = 1
+num_seg = 1
 
 maxlag = 800
 downsamp_freq=20
@@ -45,7 +46,7 @@ snr_parameters = {
     'freqmax':6,
     'steps': 15,
     'minvel': 0.5,
-    'maxvel': 10,
+    'maxvel': 3.5,
     'noisewin':100}
 
 #--------------9-component Green's tensor------------------
@@ -156,7 +157,12 @@ for ii in range(rank,splits+size-extra,size):
                     for path in rlist:
 
                         #--------cross component-------
-                        ccomp = data_type[-1]+path[-1]
+                        if num_seg==0:
+                            ccomp = data_type[-1]+path[-1]
+                        elif num_seg < 10:
+                            ccomp = data_type[-1]+path[-2]
+                        else:
+                            ccomp = data_type[-1]+path[-3]
 
                         #------put into a 2D matrix----------
                         tindx  = enz_components.index(ccomp)
