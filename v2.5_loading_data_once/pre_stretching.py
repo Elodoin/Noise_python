@@ -1,3 +1,5 @@
+from obspy.signal.filter import bandpass
+import matplotlib.pyplot as plt
 import numpy as np 
 import pyasdf
 import scipy
@@ -27,16 +29,25 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
     slist = ds.auxiliary_data.list()
 
     #------loop through the reference waveforms------
-    if slist[0]== 'AllStacked':
+    if slist[0]== 'Allstacked':
         rlist = ds.auxiliary_data[slist[0]].list()
         indx  = rlist.index(comp)
         delta = ds.auxiliary_data[slist[0]][rlist[indx]].parameters['dt']
         lag   = ds.auxiliary_data[slist[0]][rlist[indx]].parameters['lag']
+        npts  = 2*lag*int(1/delta)+1
 
         #-------final preparation of the parameters-------
         tvec = np.arange(tmin,tmax,delta)
         window = np.arange(tmin/delta,tmax/delta)+int(lag/delta)
         ref  = ds.auxiliary_data[slist[0]][rlist[indx]].data[:]
+
+        #----------plot the waveforms-----------
+        ndays = len(slist)-1
+        data  = np.zeros((ndays,npts),dtype=np.float32)
+        for ii in range(ndays):
+            tdata = ds.auxiliary_data[slist[ii+1]][rlist[indx]].data[:]
+            data[ii,:] = bandpass(tdata,fmin,fmax,int(1/delta),corners=4, zerophase=True)
+        plt.matshow(data/data.max(),cmap='seismic',extent=[-lag,lag,data.shape[0],1],vmin=-1.0, vmax=1.0,aspect='auto')
 
         #------loop through the reference waveforms------
         for ii in range(1,len(slist)):
@@ -117,3 +128,4 @@ def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, t
     error = 100*(np.sqrt(1-X**2)/(2*X)*np.sqrt((6* np.sqrt(np.pi/2)*T)/(wc**2*(t2**3-t1**3))))
 
     return dv, cc, cdp, Eps, error, C
+
