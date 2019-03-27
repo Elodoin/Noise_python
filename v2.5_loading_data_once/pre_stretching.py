@@ -1,3 +1,5 @@
+from obspy.signal.regression import linear_regression
+from obspy.signal.invsim import cosine_taper
 from obspy.signal.filter import bandpass
 import matplotlib.pyplot as plt
 import noise_module
@@ -6,103 +8,6 @@ import pyasdf
 import scipy
 import glob
 import os
-
-#----the path for the data---
-'''
-this is not important at this moment
-
-rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
-STACKDIR = os.path.join(rootpath,'STACK')
-sta = glob.glob(os.path.join(STACKDIR,'E.*'))
-nsta = len(sta)
-'''
-
-#----some common variables-----
-epsilon = 0.1
-nbtrial = 50
-tmin = -30
-tmax = -15
-fmin = 1
-fmax = 3
-comp = 'ZZ'
-maxlag = 100
-
-#----for plotting-----
-Mdate = 12
-NSV   = 2
-
-h5file = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.AYHM/E.AYHM_E.ENZM.h5'
-
-#-------open ASDF file to read data-----------
-with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
-    slist = ds.auxiliary_data.list()
-
-    #------loop through the reference waveforms------
-    if slist[0]== 'Allstacked':
-
-        #------useful parameters from ASDF file------
-        rlist = ds.auxiliary_data[slist[0]].list()
-        indxc  = rlist.index(comp)
-        delta = ds.auxiliary_data[slist[0]][rlist[indxc]].parameters['dt']
-        lag   = ds.auxiliary_data[slist[0]][rlist[indxc]].parameters['lag']
-
-        #--------index for the data---------
-        indx1 = int((lag-maxlag)/delta)
-        indx2 = int((lag+maxlag)/delta)
-        t     = np.arange(0,indx2-indx1+1,400)*delta-maxlag
-        Ntau  = int(np.ceil(np.min([1/fmin,1/fmax])/delta)) + 15
-
-        #----------plot waveforms-----------
-        ndays = len(slist)
-        data  = np.zeros((ndays,indx2-indx1+1),dtype=np.float32)
-        for ii in range(ndays):
-            tdata = ds.auxiliary_data[slist[ii]][rlist[indxc]].data[indx1:indx2+1]
-            data[ii,:] = bandpass(tdata,fmin,fmax,int(1/delta),corners=4, zerophase=True)
-        fig,ax = plt.subplots(2,sharex=True)
-        ax[0].matshow(data/data.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
-        new = noise_module.NCF_denoising(data,np.min([Mdate,data.shape[0]]),Ntau,NSV)
-        ax[1].matshow(new/new.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
-        ax[0].set_title('Filterd Cross-Correlations')
-        ax[1].set_title('Denoised Cross-Correlations')
-        ax[0].xaxis.set_visible(False)
-        ax[1].set_xticks(t)
-        ax[1].xaxis.set_ticks_position('bottom')
-        ax[1].set_xlabel('Time [s]')
-        plt.show()
-        #outfname = directory + '/' + 'Fig_dv_' + virt + '.pdf'
-        #fig.savefig(outfname, format='pdf', dpi=400)
-        #plt.close(fig)
-
-        #-------parameters for doing stretching-------
-        tvec = np.arange(tmin,tmax,delta)
-        ref  = data[0,:]
-        window = np.arange(int(tmin/delta),int(tmax/delta))+int(maxlag/delta)
-
-        #--------parameters to store dv/v and cc--------
-        dv = np.zeros(ndays,dtype=np.float32)
-        cc = np.zeros(ndays,dtype=np.float32)
-        cdp = np.zeros(ndays,dtype=np.float32)
-        error = np.zeros(ndays,dtype=np.float32)
-
-        #------loop through the reference waveforms------
-        for ii in range(1,ndays):
-            cur = data[ii,:]
-
-            #----plug in the stretching function-------
-            [dv[ii], cc[ii], cdp[ii], error[ii]] = Stretching_current(ref, cur, tvec, -epsilon, epsilon, nbtrial, window, fmin, fmax, tmin, tmax)
-
-        #----plot the results------
-        plt.subplot(311)
-        plt.title(h5file.split('/')[-1])
-        plt.plot(dv,)
-        plt.ylabel('dv/v [%]')
-        plt.subplot(312)
-        plt.plot(cc,'r-');plt.plot(cdp,'b-')
-        plt.ylabel('cc')
-        plt.subplot(313)
-        plt.plot(error)
-        plt.xlabel('days');plt.ylabel('errors [%]')
-        plt.show()
 
 
 def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, tmin, tmax):
@@ -180,98 +85,95 @@ def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, t
     return dv, cc, cdp, error
 
 
-def mwcs(current, reference, freqmin, freqmax, df, tmin, window_length, step,
-         smoothing_half_win=5):
-    """The `current` time series is compared to the `reference`.
-    Both time series are sliced in several overlapping windows.
-    Each slice is mean-adjusted and cosine-tapered (85% taper) before being Fourier-
-    transformed to the frequency domain.
-    :math:`F_{cur}(\\nu)` and :math:`F_{ref}(\\nu)` are the first halves of the
-    Hermitian symmetric Fourier-transformed segments. The cross-spectrum
-    :math:`X(\\nu)` is defined as
-    :math:`X(\\nu) = F_{ref}(\\nu) F_{cur}^*(\\nu)`
-    in which :math:`{}^*` denotes the complex conjugation.
-    :math:`X(\\nu)` is then smoothed by convolution with a Hanning window.
-    The similarity of the two time-series is assessed using the cross-coherency
-    between energy densities in the frequency domain:
-    :math:`C(\\nu) = \\frac{|\overline{X(\\nu))}|}{\sqrt{|\overline{F_{ref}(\\nu)|^2} |\overline{F_{cur}(\\nu)|^2}}}`
-    in which the over-line here represents the smoothing of the energy spectra for
-    :math:`F_{ref}` and :math:`F_{cur}` and of the spectrum of :math:`X`. The mean
-    coherence for the segment is defined as the mean of :math:`C(\\nu)` in the
-    frequency range of interest. The time-delay between the two cross correlations
-    is found in the unwrapped phase, :math:`\phi(\nu)`, of the cross spectrum and is
-    linearly proportional to frequency:
-    :math:`\phi_j = m. \nu_j, m = 2 \pi \delta t`
-    The time shift for each window between two signals is the slope :math:`m` of a
-    weighted linear regression of the samples within the frequency band of interest.
-    The weights are those introduced by [Clarke2011]_,
-    which incorporate both the cross-spectral amplitude and cross-coherence, unlike
-    [Poupinet1984]_. The errors are estimated using the weights (thus the
-    coherence) and the squared misfit to the modelled slope:
-    :math:`e_m = \sqrt{\sum_j{(\\frac{w_j \\nu_j}{\sum_i{w_i \\nu_i^2}})^2}\sigma_{\phi}^2}`
-    where :math:`w` are weights, :math:`\\nu` are cross-coherences and
-    :math:`\sigma_{\phi}^2` is the squared misfit of the data to the modelled slope
-    and is calculated as :math:`\sigma_{\phi}^2 = \\frac{\sum_j(\phi_j - m \\nu_j)^2}{N-1}`
-    The output of this process is a table containing, for each moving window: the
-    central time lag, the measured delay, its error and the mean coherence of the
-    segment.
-    .. warning::
-        The time series will not be filtered before computing the cross-spectrum!
-        They should be band-pass filtered around the `freqmin`-`freqmax` band of
-        interest beforehand.
-    :type current: :class:`numpy.ndarray`
-    :param current: The "Current" timeseries
-    :type reference: :class:`numpy.ndarray`
-    :param reference: The "Reference" timeseries
-    :type freqmin: float
-    :param freqmin: The lower frequency bound to compute the dephasing (in Hz)
-    :type freqmax: float
-    :param freqmax: The higher frequency bound to compute the dephasing (in Hz)
-    :type df: float
-    :param df: The sampling rate of the input timeseries (in Hz)
-    :type tmin: float
-    :param tmin: The leftmost time lag (used to compute the "time lags array")
-    :type window_length: float
-    :param window_length: The moving window length (in seconds)
-    :type step: float
-    :param step: The step to jump for the moving window (in seconds)
-    :type smoothing_half_win: int
-    :param smoothing_half_win: If different from 0, defines the half length of
+def smooth(x, window='boxcar', half_win=3):
+    """ some window smoothing """
+    # TODO: docsting
+    window_len = 2 * half_win + 1
+    # extending the data at beginning and at the end
+    # to apply the window at the borders
+    s = np.r_[x[window_len - 1:0:-1], x, x[-1:-window_len:-1]]
+    if window == "boxcar":
+        w = scipy.signal.boxcar(window_len).astype('complex')
+    else:
+        w = scipy.signal.hanning(window_len).astype('complex')
+    y = np.convolve(w / w.sum(), s, mode='valid')
+    return y[half_win:len(y) - half_win]
+
+
+def getCoherence(dcs, ds1, ds2):
+    # TODO: docsting
+    n = len(dcs)
+    coh = np.zeros(n).astype('complex')
+    valids = np.argwhere(np.logical_and(np.abs(ds1) > 0, np.abs(ds2) > 0))
+    coh[valids] = dcs[valids] / (ds1[valids] * ds2[valids])
+    coh[coh > (1.0 + 0j)] = 1.0 + 0j
+    return coh
+
+def nextpow2(x):
+    """
+    Returns the next power of 2 of `x`.
+    :type x: int
+    :param x: any value
+    :rtype: int
+    :returns: the next power of 2 of `x`
+    """
+    return int(np.ceil(np.log2(np.abs(x))))
+
+def mwcs_dvv(ref, cur, moving_window_length, slide_step, delta, window, fmin, fmax, tmin, smoothing_half_win=5):
+    #mwcs_dvv(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, tmin, tmax):
+    """
+    modified sub-function from MSNoise package by Thomas Lecocq. download from
+    https://github.com/ROBelgium/MSNoise/tree/master/msnoise
+
+    combine the mwcs and dv/v functionality of MSNoise into a single function
+
+    ref: The "Reference" timeseries
+    cur: The "Current" timeseries
+    moving_window_length: The moving window length (in seconds)
+    slide_step: The step to jump for the moving window (in seconds)
+    delta: The sampling rate of the input timeseries (in Hz)
+    window: The target window for measuring dt/t
+    fmin: The lower frequency bound to compute the dephasing (in Hz)
+    fmax: The higher frequency bound to compute the dephasing (in Hz)
+    tmin: The leftmost time lag (used to compute the "time lags array")
+    smoothing_half_win: If different from 0, defines the half length of
         the smoothing hanning window.
-    :rtype: :class:`numpy.ndarray`
     :returns: [time_axis,delta_t,delta_err,delta_mcoh]. time_axis contains the
         central times of the windows. The three other columns contain dt, error and
         mean coherence for each window.
     """
+    
+    ##########################
+    #-----part I: mwcs-------
+    ##########################
     delta_t = []
     delta_err = []
     delta_mcoh = []
     time_axis = []
 
-    window_length_samples = np.int(window_length * df)
-    # try:
-    #     from scipy.fftpack.helper import next_fast_len
-    # except ImportError:
-    #     from obspy.signal.util import next_pow_2 as next_fast_len
-    from msnoise.api import nextpow2
+    window_length_samples = np.int(moving_window_length * delta)
     padd = int(2 ** (nextpow2(window_length_samples) + 2))
-    # padd = next_fast_len(window_length_samples)
     count = 0
     tp = cosine_taper(window_length_samples, 0.85)
+
+    #----does minind really start from 0??-----
     minind = 0
     maxind = window_length_samples
-    while maxind <= len(current):
-        cci = current[minind:(minind + window_length_samples)]
+
+    #-------loop through all sub-windows-------
+    while maxind <= len(window):
+        cci = cur[window[minind:maxind]]
         cci = scipy.signal.detrend(cci, type='linear')
         cci *= tp
 
-        cri = reference[minind:(minind + window_length_samples)]
+        cri = ref[window[minind:maxind]]
         cri = scipy.signal.detrend(cri, type='linear')
         cri *= tp
 
-        minind += int(step*df)
-        maxind += int(step*df)
+        minind += int(slide_step*delta)
+        maxind += int(slide_step*delta)
 
+        #-------------get the spectrum-------------
         fcur = scipy.fftpack.fft(cci, n=padd)[:padd // 2]
         fref = scipy.fftpack.fft(cri, n=padd)[:padd // 2]
 
@@ -281,12 +183,9 @@ def mwcs(current, reference, freqmin, freqmax, df, tmin, window_length, step,
         # Calculate the cross-spectrum
         X = fref * (fcur.conj())
         if smoothing_half_win != 0:
-            dcur = np.sqrt(smooth(fcur2, window='hanning',
-                                  half_win=smoothing_half_win))
-            dref = np.sqrt(smooth(fref2, window='hanning',
-                                  half_win=smoothing_half_win))
-            X = smooth(X, window='hanning',
-                       half_win=smoothing_half_win)
+            dcur = np.sqrt(smooth(fcur2, window='hanning',half_win=smoothing_half_win))
+            dref = np.sqrt(smooth(fref2, window='hanning',half_win=smoothing_half_win))
+            X = smooth(X, window='hanning',half_win=smoothing_half_win)
         else:
             dcur = np.sqrt(fcur2)
             dref = np.sqrt(fref2)
@@ -294,9 +193,8 @@ def mwcs(current, reference, freqmin, freqmax, df, tmin, window_length, step,
         dcs = np.abs(X)
 
         # Find the values the frequency range of interest
-        freq_vec = scipy.fftpack.fftfreq(len(X) * 2, 1. / df)[:padd // 2]
-        index_range = np.argwhere(np.logical_and(freq_vec >= freqmin,
-                                                 freq_vec <= freqmax))
+        freq_vec = scipy.fftpack.fftfreq(len(X) * 2, 1. / delta)[:padd // 2]
+        index_range = np.argwhere(np.logical_and(freq_vec >= fmin,freq_vec <= fmax))
 
         # Get Coherence and its mean value
         coh = getCoherence(dcs, dref, dcur)
@@ -332,7 +230,7 @@ def mwcs(current, reference, freqmin, freqmax, df, tmin, window_length, step,
 
         delta_err.append(e)
         delta_mcoh.append(np.real(mcoh))
-        time_axis.append(tmin+window_length/2.+count*step)
+        time_axis.append(tmin+moving_window_length/2.+count*slide_step)
         count += 1
 
         del fcur, fref
@@ -341,7 +239,152 @@ def mwcs(current, reference, freqmin, freqmax, df, tmin, window_length, step,
         del index_range
         del w, v, e, s2x2, sx2, m, em
 
-    if maxind > len(current) + step*df:
-        logging.warning("The last window was too small, but was computed")
+    if maxind > len(cur) + slide_step*delta:
+        print("The last window was too small, but was computed")
 
-    return np.array([time_axis, delta_t, delta_err, delta_mcoh]).T
+    delta_t = np.array(delta_t)
+    delta_err = np.array(delta_err)
+    delta_mcoh = np.array(delta_mcoh)
+    time_axis  = np.array(time_axis)
+
+    #####################################
+    #-----------part II: dv/v------------
+    #####################################
+    delta_mincho = 0.65
+    delta_maxerr = 0.1
+    delta_maxdt  = 0.1
+    indx1 = np.where(delta_mcoh>delta_mincho)
+    indx2 = np.where(delta_err<delta_maxerr)
+    indx3 = np.where(delta_t<delta_maxdt)
+
+    #-----find good dt measurements-----
+    indx = np.intersect1d(indx1,indx2)
+    indx = np.intersect1d(indx,indx3)
+
+    #----estimate weight for regression----
+    w = 1/delta_err[indx]
+    w[~np.isfinite(w)] = 1.0
+
+    #---------do linear regression-----------
+    #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
+    m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+
+    return np.array([-m0*100,em0*100]).T
+
+
+def wavg_wstd(data, errors):
+    '''
+    estimate the weights for doing linear regression in order to get dt/t
+    '''
+
+    d = data
+    errors[errors == 0] = 1e-6
+    w = 1. / errors
+    wavg = (d * w).sum() / w.sum()
+    N = len(np.nonzero(w)[0])
+    wstd = np.sqrt(np.sum(w * (d - wavg) ** 2) / ((N - 1) * np.sum(w) / N))
+    return wavg, wstd
+
+
+#----the path for the data---
+'''
+this is not important at this moment
+
+rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
+STACKDIR = os.path.join(rootpath,'STACK')
+sta = glob.glob(os.path.join(STACKDIR,'E.*'))
+nsta = len(sta)
+'''
+
+#----some common variables-----
+epsilon = 0.1
+nbtrial = 50
+tmin = -30
+tmax = -15
+fmin = 1
+fmax = 3
+comp = 'ZZ'
+maxlag = 100
+
+#----for plotting-----
+Mdate = 12
+NSV   = 2
+
+h5file = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.AYHM/E.AYHM_E.ENZM.h5'
+
+#-------open ASDF file to read data-----------
+with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
+    slist = ds.auxiliary_data.list()
+
+    #------loop through the reference waveforms------
+    if slist[0]== 'Allstacked':
+
+        #------useful parameters from ASDF file------
+        rlist = ds.auxiliary_data[slist[0]].list()
+        indxc  = rlist.index(comp)
+        delta = ds.auxiliary_data[slist[0]][rlist[indxc]].parameters['dt']
+        lag   = ds.auxiliary_data[slist[0]][rlist[indxc]].parameters['lag']
+
+        #--------index for the data---------
+        indx1 = int((lag-maxlag)/delta)
+        indx2 = int((lag+maxlag)/delta)
+        t     = np.arange(0,indx2-indx1+1,400)*delta-maxlag
+        Ntau  = int(np.ceil(np.min([1/fmin,1/fmax])/delta)) + 15
+
+        #----------plot waveforms-----------
+        ndays = len(slist)
+        data  = np.zeros((ndays,indx2-indx1+1),dtype=np.float32)
+        for ii in range(ndays):
+            tdata = ds.auxiliary_data[slist[ii]][rlist[indxc]].data[indx1:indx2+1]
+            data[ii,:] = bandpass(tdata,fmin,fmax,int(1/delta),corners=4, zerophase=True)
+
+        fig,ax = plt.subplots(2,sharex=True)
+        ax[0].matshow(data/data.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
+        new = noise_module.NCF_denoising(data,np.min([Mdate,data.shape[0]]),Ntau,NSV)
+        ax[1].matshow(new/new.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
+        ax[0].set_title('Filterd Cross-Correlations')
+        ax[1].set_title('Denoised Cross-Correlations')
+        ax[0].xaxis.set_visible(False)
+        ax[1].set_xticks(t)
+        ax[1].xaxis.set_ticks_position('bottom')
+        ax[1].set_xlabel('Time [s]')
+        plt.show()
+        #outfname = directory + '/' + 'Fig_dv_' + virt + '.pdf'
+        #fig.savefig(outfname, format='pdf', dpi=400)
+        #plt.close(fig)
+
+        #-------parameters for doing stretching-------
+        tvec = np.arange(tmin,tmax,delta)
+        ref  = data[0,:]
+        window = np.arange(int(tmin/delta),int(tmax/delta))+int(maxlag/delta)
+
+        #--------parameters to store dv/v and cc--------
+        dv1 = np.zeros(ndays,dtype=np.float32)
+        cc = np.zeros(ndays,dtype=np.float32)
+        cdp = np.zeros(ndays,dtype=np.float32)
+        error1 = np.zeros(ndays,dtype=np.float32)
+        dv2 = np.zeros(ndays,dtype=np.float32)
+        error2 = np.zeros(ndays,dtype=np.float32)
+        moving_window_length = 3*int(1/fmin)
+        slide_step = 0.4*moving_window_length
+
+        #------loop through the reference waveforms------
+        for ii in range(1,ndays-25):
+            cur = data[ii,:]
+
+            #----plug in the stretching function-------
+            [dv1[ii], cc[ii], cdp[ii], error1[ii]] = Stretching_current(ref, cur, tvec, -epsilon, epsilon, nbtrial, window, fmin, fmax, tmin, tmax)
+            [dv2[ii], error2[ii]] = mwcs_dvv(ref, cur, moving_window_length, slide_step, int(1/delta), window, fmin, fmax, tmin)
+
+        #----plot the results------
+        plt.subplot(311)
+        plt.title(h5file.split('/')[-1])
+        plt.plot(dv1,'r-');plt.plot(dv2,'b-')
+        plt.ylabel('dv/v [%]')
+        plt.subplot(312)
+        plt.plot(cc,'r-');plt.plot(cdp,'b-')
+        plt.ylabel('cc')
+        plt.subplot(313)
+        plt.plot(error1,'r-');plt.plot(error2,'b-')
+        plt.xlabel('days');plt.ylabel('errors [%]')
+        plt.show()
