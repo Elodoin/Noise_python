@@ -105,9 +105,7 @@ for ii in range(rank,splits+size-extra,size):
                     ncomp = len(data_types)
                     print('first station of %s misses other components' % (sfiles[0]))
 
-        #-----------useful array for save/writing stacked CCFs--------------
-        #cc_data = np.zeros((ntrace,2*maxlag*downsamp_freq+1),dtype=np.float32)
-        cc_flag = np.zeros((ntrace),dtype=np.int16)
+        #--------record station information--------
         cc_coor = np.zeros((nsta,2),dtype=np.float32)
         sta = []
         net = []
@@ -121,7 +119,6 @@ for ii in range(rank,splits+size-extra,size):
             if iseg==num_seg-1:
                 nhours = Nseg-iseg*nhours
             sindx2 = sindx1+nhours
-            print(iseg,nhours,sindx1,sindx2)
 
             if nhours==0 or nhours <0:
                 raise ValueError('nhours<=0, please double check')
@@ -139,6 +136,7 @@ for ii in range(rank,splits+size-extra,size):
             #---------------initialize the array-------------------
             cc_array = np.zeros((ntrace,nhours*Nfft//2),dtype=np.complex64)
             cc_std   = np.zeros((ntrace,nhours),dtype=np.float32)
+            cc_flag  = np.zeros((ntrace),dtype=np.int16)
 
             ttr0 = time.time()
             #-----loop through all stations------
@@ -177,11 +175,14 @@ for ii in range(rank,splits+size-extra,size):
                                 #-----check bound----
                                 if indx > ntrace:
                                     raise ValueError('index out of bound')
-                                cc_flag[indx] = 1
-                                data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
-                                cc_array[indx][:]= data.reshape(data.size)
-                                std   = ds.auxiliary_data[icomp][iday].parameters['std']
-                                cc_std[indx][:]  = std[sindx1:sindx2]
+                                
+                                dsize = ds.auxiliary_data[icomp][iday].data.size
+                                if dsize == Nseg*Nfft//2:
+                                    cc_flag[indx] = 1
+                                    data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
+                                    cc_array[indx][:]= data.reshape(data.size)
+                                    std   = ds.auxiliary_data[icomp][iday].parameters['std']
+                                    cc_std[indx][:]  = std[sindx1:sindx2]
                     else:
 
                         #-----E-N-U/Z orders when all components are available-----
@@ -197,12 +198,13 @@ for ii in range(rank,splits+size-extra,size):
                                 if indx > ntrace:
                                     raise ValueError('index out of bound')
 
-                                cc_flag[indx] = 1
-                                data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
-                                #print(data.size,nhours*Nfft//2)
-                                cc_array[indx][:]= data.reshape(data.size)
-                                std   = ds.auxiliary_data[icomp][iday].parameters['std']
-                                cc_std[indx][:]  = std[sindx1:sindx2]
+                                dsize = ds.auxiliary_data[icomp][iday].data.size
+                                if dsize == Nseg*Nfft//2:
+                                    data  = ds.auxiliary_data[icomp][iday].data[sindx1:sindx2,:]
+                                    cc_array[indx][:]= data.reshape(data.size)
+                                    std   = ds.auxiliary_data[icomp][iday].parameters['std']
+                                    cc_std[indx][:]  = std[sindx1:sindx2]
+                                    cc_flag[indx] = 1
 
             ttr1 = time.time()
             print('loading all FFT takes %6.4fs' % (ttr1-ttr0))
@@ -229,6 +231,7 @@ for ii in range(rank,splits+size-extra,size):
                             
                     fft1 = cc_array[cc_indxS][:]
                     source_std = cc_std[cc_indxS][:]
+                    sou_ind = np.where(source_std < 10)[0]
                     
                     t0=time.time()
                     #-----------get the smoothed source spectrum for decon later----------
@@ -262,7 +265,9 @@ for ii in range(rank,splits+size-extra,size):
 
                     elif method == 'raw':
                         sfft1 = fft1
+                    
                     sfft1 = sfft1.reshape(nhours,Nfft//2)
+                    del temp,fft1,source_std
 
                     t1=time.time()
                     if flag:
@@ -300,7 +305,6 @@ for ii in range(rank,splits+size-extra,size):
 
                             #---------- check the existence of earthquakes ----------
                             rec_ind = np.where(receiver_std < 10)[0]
-                            sou_ind = np.where(source_std < 10)[0]
 
                             #-----note that Hi-net has a few mi-secs differences to Mesonet in terms starting time-----
                             bb=np.intersect1d(sou_ind,rec_ind)
@@ -311,10 +315,11 @@ for ii in range(rank,splits+size-extra,size):
                             corr=noise_module.optimized_correlate1(sfft1[bb,:],fft2[bb,:],\
                                     np.round(maxlag),dt,Nfft,len(bb),method)
                             t4=time.time()
+                            del fft2,receiver_std,rec_ind,sou_ind
 
                             #---------------keep daily cross-correlation into a hdf5 file--------------
                             cc_aday_h5 = os.path.join(CCFDIR,iday+'.h5')
-                            crap   = np.zeros(corr.shape)
+                            crap   = np.zeros(corr.shape,dtype=np.float32)
 
                             if not os.path.isfile(cc_aday_h5):
                                 with pyasdf.ASDFDataSet(cc_aday_h5,mpi=False) as ccf_ds:
@@ -342,13 +347,18 @@ for ii in range(rank,splits+size-extra,size):
                                 path = netR+'s'+staR+'s'+compR+str(iseg)
                                 data_type = netS+'s'+staS+'s'+compS
 
-                                crap = corr
+                                crap[:] = corr[:]
                                 ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
                             t5=time.time()
                             if flag:
                                 print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t3-t2),(t4-t3),(t5-t4)))
-            
+
+            del cc_array,cc_std
+
+            ttr2 = time.time()
+            print('it takes %6.4fs to process %dth segment of data' %((ttr2-ttr1),iseg))
+
         tt1 = time.time()
         print('it takes %6.4fs to process day %s [%d segment] in step 2' % (tt1-tt0,iday,num_seg))
 

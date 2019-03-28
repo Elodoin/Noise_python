@@ -12,11 +12,8 @@ import os
 
 def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, tmin, tmax):
     """
-    Stretching function: 
-    This function compares the Reference waveform to stretched/compressed current waveforms to get the relative seismic velocity variation (and associated error).
-    It also computes the correlation coefficient between the Reference waveform and the current waveform.
-
-    modified based on the script from L. Viens 04/26/2018 (Viens et al., 2018 JGR)
+    modified the script from L. Viens 04/26/2018 (Viens et al., 2018 JGR)
+    https://github.com/lviens/2018_JGR
 
     INPUTS:
         - ref = Reference waveform (np.ndarray, size N)
@@ -42,7 +39,7 @@ def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, t
     A refined analysis is then performed around this value to obtain a more precise dv/v measurement .
     """ 
     Eps = 1+(np.linspace(dvmin, dvmax, nbtrial))
-    Cof = np.zeros(Eps.shape,dtype=np.float32)
+    cof = np.zeros(Eps.shape,dtype=np.float32)
 
     # Set of stretched/compressed current waveforms
     for ii in range(len(Eps)):
@@ -50,13 +47,13 @@ def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, t
         s = np.interp(x=t, xp=nt, fp=cur[window])
         waveform_ref = ref[window]
         waveform_cur = s
-        Cof[ii] = np.corrcoef(waveform_ref, waveform_cur)[0, 1]
+        cof[ii] = np.corrcoef(waveform_ref, waveform_cur)[0, 1]
 
     cdp = np.corrcoef(cur[window], ref[window])[0, 1] # correlation coefficient between the reference and initial current waveforms
 
     # find the maximum correlation coefficient
-    imax = np.nanargmax(Cof)
-    if imax >= len(Eps)-1:
+    imax = np.nanargmax(cof)
+    if imax >= len(Eps)-2:
         imax = imax - 2
     if imax <= 2:
         imax = imax + 2
@@ -260,14 +257,17 @@ def mwcs_dvv(ref, cur, moving_window_length, slide_step, delta, window, fmin, fm
     #-----find good dt measurements-----
     indx = np.intersect1d(indx1,indx2)
     indx = np.intersect1d(indx,indx3)
+    if len(indx) > 2:
 
-    #----estimate weight for regression----
-    w = 1/delta_err[indx]
-    w[~np.isfinite(w)] = 1.0
+        #----estimate weight for regression----
+        w = 1/delta_err[indx]
+        w[~np.isfinite(w)] = 1.0
 
-    #---------do linear regression-----------
-    #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
-    m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+        #---------do linear regression-----------
+        #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
+        m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+    else:
+        m0=0;em0=0
 
     return np.array([-m0*100,em0*100]).T
 
@@ -299,10 +299,10 @@ nsta = len(sta)
 #----some common variables-----
 epsilon = 0.1
 nbtrial = 50
-tmin = -30
-tmax = -15
-fmin = 1
-fmax = 3
+tmin = -50
+tmax = -20
+fmin = 0.3
+fmax = 0.5
 comp = 'ZZ'
 maxlag = 100
 
@@ -358,6 +358,10 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
         ref  = data[0,:]
         window = np.arange(int(tmin/delta),int(tmax/delta))+int(maxlag/delta)
 
+        #-------parameters for MWCS-----------
+        moving_window_length = 2.5*int(1/fmin)
+        slide_step = 0.5*moving_window_length
+
         #--------parameters to store dv/v and cc--------
         dv1 = np.zeros(ndays,dtype=np.float32)
         cc = np.zeros(ndays,dtype=np.float32)
@@ -365,11 +369,9 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
         error1 = np.zeros(ndays,dtype=np.float32)
         dv2 = np.zeros(ndays,dtype=np.float32)
         error2 = np.zeros(ndays,dtype=np.float32)
-        moving_window_length = 3*int(1/fmin)
-        slide_step = 0.4*moving_window_length
 
         #------loop through the reference waveforms------
-        for ii in range(1,ndays-25):
+        for ii in range(1,ndays):
             cur = data[ii,:]
 
             #----plug in the stretching function-------
