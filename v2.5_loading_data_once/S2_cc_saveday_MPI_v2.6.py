@@ -96,6 +96,7 @@ for ii in range(rank,splits+size-extra,size):
         ncomp = len(data_types)
         nsta  = len(sfiles)
         ntrace = ncomp*nsta
+        del data_types,paths
 
         #----double check the ncomp parameters by opening a few stations------
         for jj in range(1,10):
@@ -104,6 +105,7 @@ for ii in range(rank,splits+size-extra,size):
                 if len(data_types) > ncomp:
                     ncomp = len(data_types)
                     print('first station of %s misses other components' % (sfiles[0]))
+        del data_types
 
         #--------record station information--------
         cc_coor = np.zeros((nsta,2),dtype=np.float32)
@@ -183,6 +185,8 @@ for ii in range(rank,splits+size-extra,size):
                                     cc_array[indx][:]= data.reshape(data.size)
                                     std   = ds.auxiliary_data[icomp][iday].parameters['std']
                                     cc_std[indx][:]  = std[sindx1:sindx2]
+                            del tpaths,data,std
+                    
                     else:
 
                         #-----E-N-U/Z orders when all components are available-----
@@ -205,6 +209,8 @@ for ii in range(rank,splits+size-extra,size):
                                     std   = ds.auxiliary_data[icomp][iday].parameters['std']
                                     cc_std[indx][:]  = std[sindx1:sindx2]
                                     cc_flag[indx] = 1
+                            del tpaths,data,std
+                    del data_types
 
             ttr1 = time.time()
             print('loading all FFT takes %6.4fs' % (ttr1-ttr0))
@@ -350,11 +356,13 @@ for ii in range(rank,splits+size-extra,size):
                                 crap[:] = corr[:]
                                 ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
+                                del parameters,crap
+
                             t5=time.time()
                             if flag:
                                 print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t3-t2),(t4-t3),(t5-t4)))
 
-            del cc_array,cc_std
+            del cc_array,cc_std,cc_flag
 
             ttr2 = time.time()
             print('it takes %6.4fs to process %dth segment of data' %((ttr2-ttr1),iseg))
