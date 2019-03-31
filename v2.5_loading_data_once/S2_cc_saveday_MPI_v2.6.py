@@ -1,4 +1,5 @@
 import os
+import gc
 import sys
 import glob
 import numpy as np
@@ -42,7 +43,7 @@ CCFDIR = os.path.join(rootpath,'CCF/test')
 
 #-----some control parameters------
 flag=False               #output intermediate variables and computing times
-auto_corr=False         #include single-station auto-correlations or not
+#auto_corr=False         #include single-station auto-correlations or not
 smooth_N=10             #window length for smoothing the spectrum amplitude
 num_seg=4
 downsamp_freq=20
@@ -52,11 +53,11 @@ step=1800
 maxlag=800              #enlarge this number if to do C3
 method='deconv'
 start_date = '2011_03_01'
-end_date   = '2011_03_06'
+end_date   = '2011_03_01'
 inc_days   = 1
 
-if auto_corr and method=='coherence':
-    raise ValueError('Please set method to decon: coherence cannot be applied when auto_corr is wanted!')
+#if auto_corr and method=='coherence':
+#    raise ValueError('Please set method to decon: coherence cannot be applied when auto_corr is wanted!')
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -93,10 +94,9 @@ for ii in range(rank,splits+size-extra,size):
             paths      = ds.auxiliary_data[data_types[0]].list()
             Nfft = ds.auxiliary_data[data_types[0]][paths[0]].parameters['nfft']
             Nseg = ds.auxiliary_data[data_types[0]][paths[0]].parameters['nseg']
-        ncomp = len(data_types)
-        nsta  = len(sfiles)
-        ntrace = ncomp*nsta
-        del data_types,paths
+            ncomp = len(data_types)
+            nsta  = len(sfiles)
+            ntrace = ncomp*nsta
 
         #----double check the ncomp parameters by opening a few stations------
         for jj in range(1,10):
@@ -105,7 +105,6 @@ for ii in range(rank,splits+size-extra,size):
                 if len(data_types) > ncomp:
                     ncomp = len(data_types)
                     print('first station of %s misses other components' % (sfiles[0]))
-        del data_types
 
         #--------record station information--------
         cc_coor = np.zeros((nsta,2),dtype=np.float32)
@@ -185,7 +184,6 @@ for ii in range(rank,splits+size-extra,size):
                                     cc_array[indx][:]= data.reshape(data.size)
                                     std   = ds.auxiliary_data[icomp][iday].parameters['std']
                                     cc_std[indx][:]  = std[sindx1:sindx2]
-                            del tpaths,data,std
                     
                     else:
 
@@ -209,15 +207,13 @@ for ii in range(rank,splits+size-extra,size):
                                     std   = ds.auxiliary_data[icomp][iday].parameters['std']
                                     cc_std[indx][:]  = std[sindx1:sindx2]
                                     cc_flag[indx] = 1
-                            del tpaths,data,std
-                    del data_types
 
             ttr1 = time.time()
             print('loading all FFT takes %6.4fs' % (ttr1-ttr0))
 
             #-------loop I of each source------
             for isource in range(nsta-1):
-                continue
+
                 #---station info---
                 staS = sta[isource]
                 netS = net[isource]
@@ -244,17 +240,7 @@ for ii in range(rank,splits+size-extra,size):
                     if method == 'deconv':
 
                         #-----normalize single-station cc to z component-----
-                        if auto_corr:
-                            auto_indx = isource*ncomp+2
-                            auto_corr_flag = False
-
-                            #----only do auto-corr when Z exists---- 
-                            if cc_flag[auto_indx]:
-                                fft_temp = cc_array[auto_indx][:]
-                                temp     = noise_module.moving_ave(np.abs(fft_temp),smooth_N)
-                                auto_corr_flag = True
-                        else:
-                            temp = noise_module.moving_ave(np.abs(fft1),smooth_N)
+                        temp = noise_module.moving_ave(np.abs(fft1),smooth_N)
 
                         #--------think about how to avoid temp==0-----------
                         try:
@@ -273,19 +259,13 @@ for ii in range(rank,splits+size-extra,size):
                         sfft1 = fft1
                     
                     sfft1 = sfft1.reshape(nhours,Nfft//2)
-                    del temp,fft1,source_std
 
                     t1=time.time()
                     if flag:
                         print('smooth %6.4fs' % (t1-t0))
 
                     #-----------now loop III for each receiver B----------
-                    if auto_corr and auto_corr_flag:
-                        tindex = isource
-                    else:
-                        tindex = isource+1
-
-                    for ireceiver in range(tindex,nsta):
+                    for ireceiver in range(isource+1,nsta):
 
                         #---station info---
                         staR = sta[ireceiver]
@@ -321,7 +301,6 @@ for ii in range(rank,splits+size-extra,size):
                             corr=noise_module.optimized_correlate1(sfft1[bb,:],fft2[bb,:],\
                                     np.round(maxlag),dt,Nfft,len(bb),method)
                             t4=time.time()
-                            del fft2,receiver_std,rec_ind,sou_ind
 
                             #---------------keep daily cross-correlation into a hdf5 file--------------
                             cc_aday_h5 = os.path.join(CCFDIR,iday+'.h5')
@@ -356,13 +335,13 @@ for ii in range(rank,splits+size-extra,size):
                                 crap[:] = corr[:]
                                 ccf_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
-                                del parameters,crap
-
                             t5=time.time()
                             if flag:
                                 print('read R %6.4fs, cc %6.4fs, write cc %6.4fs'% ((t3-t2),(t4-t3),(t5-t4)))
 
-            del cc_array,cc_std,cc_flag
+            cc_array=[];cc_std=[];cc_flag=[]
+            n = gc.collect()
+            print('unreadable garbarge',n)
 
             ttr2 = time.time()
             print('it takes %6.4fs to process %dth segment of data' %((ttr2-ttr1),iseg))

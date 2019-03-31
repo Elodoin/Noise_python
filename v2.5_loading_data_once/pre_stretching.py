@@ -84,7 +84,6 @@ def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, t
 
 def smooth(x, window='boxcar', half_win=3):
     """ some window smoothing """
-    # TODO: docsting
     window_len = 2 * half_win + 1
     # extending the data at beginning and at the end
     # to apply the window at the borders
@@ -98,7 +97,9 @@ def smooth(x, window='boxcar', half_win=3):
 
 
 def getCoherence(dcs, ds1, ds2):
-    # TODO: docsting
+    '''
+    a sub-function from MSNoise to estimate the weight for getting delta t
+    '''
     n = len(dcs)
     coh = np.zeros(n).astype('complex')
     valids = np.argwhere(np.logical_and(np.abs(ds1) > 0, np.abs(ds2) > 0))
@@ -297,12 +298,12 @@ nsta = len(sta)
 '''
 
 #----some common variables-----
-epsilon = 0.1
+epsilon = 0.01
 nbtrial = 50
-tmin = -50
-tmax = -20
-fmin = 0.3
-fmax = 0.5
+tmin = -20
+tmax = -5
+fmin = 1
+fmax = 3
 comp = 'ZZ'
 maxlag = 100
 
