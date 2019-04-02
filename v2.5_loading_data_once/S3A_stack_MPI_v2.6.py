@@ -14,6 +14,8 @@ which afford exploration of the stability of the stacked ccfs for monitoring pur
 
 modified to make statistic analysis of the daily CCFs (amplitude) in order to select the ones
 with abnormal large amplitude that would dominate the finally stacked waveforms (Apr/01/2019)
+
+~7 times faster compared to v2.5
 '''
 
 t0=time.time()
@@ -22,7 +24,7 @@ t0=time.time()
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
 CCFDIR = os.path.join(rootpath,'CCF')
 FFTDIR = os.path.join(rootpath,'FFT')
-STACKDIR = os.path.join(rootpath,'STACK')
+STACKDIR = os.path.join(rootpath,'STACK1')
 
 #------------make correction due to mis-orientation of instruments---------------
 correction = True
@@ -39,7 +41,7 @@ one_component = False
 stack_days = 1
 num_seg = 4
 
-maxlag = 500
+maxlag = 800
 downsamp_freq=20
 dt=1/downsamp_freq
 pi = 3.141593
@@ -116,7 +118,7 @@ for ii in range(rank,splits+size-extra,size):
 
         #-------------move to next pair if it already exists----------------
         stack_h5 = os.path.join(STACKDIR,source+'/'+source+'_'+receiver+'.h5')
-        if os.isfile(stack_h5):
+        if os.path.isfile(stack_h5):
             print('file %s already exists! continue' % stack_h5.split('/')[-1])
             continue
 
@@ -192,9 +194,10 @@ for ii in range(rank,splits+size-extra,size):
                         #------maximum amplitude of daly CCFs--------
                         if ampmax[iday,tindx] < np.max(corr[findx]):
                             ampmax[iday,tindx] = np.max(corr[findx])
-        del tindx,findx
+                        
         t2 = time.time()
-        print('loading data takes %6.3fs'%(t2-t1))
+        if flag:
+            print('loading data takes %6.3fs'%(t2-t1))
 
         #--------make statistic analysis of CCFs at each component----------
         for icomp in range(ncomp):
@@ -206,13 +209,15 @@ for ii in range(rank,splits+size-extra,size):
             for gooday in indx_gooday:
                 findx = gooday*ncomp+icomp
                 corr[findx] /= nflag[gooday,icomp]
-        del findx,indx1,indx2,indx_gooday
 
         #------stack the CCFs------
         for isday in range(nstack):
 
             indx1 = isday*stack_days
-            indx2 = (indx1+stack_days)
+            if isday == nstack-1:
+                indx2 = ndays-1
+            else:
+                indx2 = (indx1+stack_days)
 
             #--------start and end day information--------
             date_s = ccfs[indx1].split('/')[-1].split('.')[0]
@@ -241,6 +246,13 @@ for ii in range(rank,splits+size-extra,size):
                     tindx2 = np.where(nflag[tindx1,ii]>0)[0]
                     indx   = tindx1[tindx2]*ncomp+ii
 
+                    #-----accumulated good hours--------
+                    tngood = 0
+                    for tii in range(tindx1,tindx2+1):
+                        tngood += ngood[tii,ii]
+                    new_parameters = parameters
+                    new_parameters['ngood'] = tngood
+
                     #-----break if no good data in the stacking-days-----
                     if len(indx)==0:
                         tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
@@ -259,7 +271,7 @@ for ii in range(rank,splits+size-extra,size):
                     data_type = 'F'+date_s+'T'+date_e
                     path = icomp
                     crap = tcorr[ii]
-                    stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                    stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
 
                 #-------do rotation here if needed---------
                 if do_rotation:
@@ -267,8 +279,8 @@ for ii in range(rank,splits+size-extra,size):
                         print('doing matrix rotation now!')
 
                     #---read azi, baz info---
-                    azi = parameters['azi']
-                    baz = parameters['baz']
+                    azi = new_parameters['azi']
+                    baz = new_parameters['baz']
 
                     #---angles to be corrected----
                     if correction:
@@ -317,10 +329,11 @@ for ii in range(rank,splits+size-extra,size):
                         #------save the time domain cross-correlation functions-----
                         data_type = 'F'+date_s+'T'+date_e
                         path = rtz_components[ii]
-                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
         
         t3=time.time()
-        print('stack all sub-segments takes %6.3fs'%(t3-t2))
+        if flag:
+            print('stack all sub-segments takes %6.3fs'%(t3-t2))
 
         #--------------now stack all of the days---------------
         tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
@@ -347,7 +360,7 @@ for ii in range(rank,splits+size-extra,size):
                 data_type = 'Allstacked'
                 path = icomp
                 crap = tcorr[ii]
-                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
 
             #----do rotation-----
             if do_rotation:
@@ -381,8 +394,9 @@ for ii in range(rank,splits+size-extra,size):
                     #------save the time domain cross-correlation functions-----
                     data_type = 'Allstacked'
                     path = rtz_components[ii]
-                    stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
-
+                    stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
+        
+        del corr,ampmax,nflag,ngood
 
 t4=time.time()
 print('S3 takes '+str(t4-t0)+' s')
