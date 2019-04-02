@@ -102,22 +102,25 @@ splits = comm.bcast(splits,root=0)
 extra  = splits % size
 
 
-#-----loop I: source station------
+#-----loop I: station pairs------
 for ii in range(rank,splits+size-extra,size):
     
     if ii<splits:
 
+        t1=time.time()
+        #-------basic parameters--------
         source,receiver = pairs[ii][0],pairs[ii][1]
         ndays  = len(ccfs)
         ncomp  = len(enz_components)
         nstack = ndays//stack_days
 
+        #-------------move to next pair if it already exists----------------
         stack_h5 = os.path.join(STACKDIR,source+'/'+source+'_'+receiver+'.h5')
         if os.isfile(stack_h5):
             print('file %s already exists! continue' % stack_h5.split('/')[-1])
             continue
 
-        #------------parameters to store the CCFs--------
+        #---------------parameters to store the CCFs------------------
         corr   = np.zeros((ndays*ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
         ampmax = np.zeros((ndays,ncomp),dtype=np.float32)
         ngood  = np.zeros((ndays,ncomp),dtype=np.int16)
@@ -189,7 +192,9 @@ for ii in range(rank,splits+size-extra,size):
                         #------maximum amplitude of daly CCFs--------
                         if ampmax[iday,tindx] < np.max(corr[findx]):
                             ampmax[iday,tindx] = np.max(corr[findx])
-
+        del tindx,findx
+        t2 = time.time()
+        print('loading data takes %6.3fs'%(t2-t1))
 
         #--------make statistic analysis of CCFs at each component----------
         for icomp in range(ncomp):
@@ -201,8 +206,9 @@ for ii in range(rank,splits+size-extra,size):
             for gooday in indx_gooday:
                 findx = gooday*ncomp+icomp
                 corr[findx] /= nflag[gooday,icomp]
+        del findx,indx1,indx2,indx_gooday
 
-        #------stack the CCFs--------
+        #------stack the CCFs------
         for isday in range(nstack):
 
             indx1 = isday*stack_days
@@ -210,7 +216,7 @@ for ii in range(rank,splits+size-extra,size):
 
             #--------start and end day information--------
             date_s = ccfs[indx1].split('/')[-1].split('.')[0]
-            date_s = data_s.replace('_','')
+            date_s = date_s.replace('_','')
             date_e = ccfs[indx2].split('/')[-1].split('.')[0]
             date_e = date_e.replace('_','')
 
@@ -230,8 +236,15 @@ for ii in range(rank,splits+size-extra,size):
                 tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
                 #-----loop through all E-N-Z components-----
                 for ii in range(ncomp):
-                    icomp = enz_components[ii]
-                    indx  = xxx
+                    icomp  = enz_components[ii]
+                    tindx1 = np.arange(indx1,indx2,1)
+                    tindx2 = np.where(nflag[tindx1,ii]>0)[0]
+                    indx   = tindx1[tindx2]*ncomp+ii
+
+                    #-----break if no good data in the stacking-days-----
+                    if len(indx)==0:
+                        tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
+                        break
 
                     #------do average-----
                     tcorr[ii] = np.mean(corr[indx],axis=0)
@@ -305,6 +318,9 @@ for ii in range(rank,splits+size-extra,size):
                         data_type = 'F'+date_s+'T'+date_e
                         path = rtz_components[ii]
                         stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
+        
+        t3=time.time()
+        print('stack all sub-segments takes %6.3fs'%(t3-t2))
 
         #--------------now stack all of the days---------------
         tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
@@ -312,11 +328,17 @@ for ii in range(rank,splits+size-extra,size):
             for ii in range(ncomp):
                 icomp = enz_components[ii]
 
-                #------do average here--------
-                if num2[ii]==0:
-                    print('station-pair %s_%s no data at all for  %s: filling zero' % (source,receiver,icomp))
-                else:
-                    ncorr[ii] = ncorr[ii]/num2[ii]
+                tindx1 = np.arange(0,ndays,1)
+                tindx2 = np.where(nflag[tindx1,ii]>0)[0]
+                indx   = tindx1[tindx2]*ncomp+ii
+
+                #-----break if no good data in the stacking-days-----
+                if len(indx)==0:
+                    tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
+                    break
+
+                #------do average-----
+                tcorr[ii] = np.mean(corr[indx],axis=0)
                 
                 #--------evaluate the SNR of the signal at target period range-------
                 #new_parameters = noise_module.get_SNR(ncorr[ii],snr_parameters,parameters)
@@ -325,7 +347,7 @@ for ii in range(rank,splits+size-extra,size):
                 data_type = 'Allstacked'
                 path = icomp
                 crap = tcorr[ii]
-                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
+                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
             #----do rotation-----
             if do_rotation:
@@ -362,8 +384,8 @@ for ii in range(rank,splits+size-extra,size):
                     stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=parameters)
 
 
-t1=time.time()
-print('S3 takes '+str(t1-t0)+' s')
+t4=time.time()
+print('S3 takes '+str(t4-t0)+' s')
 
 #---ready to exit---
 comm.barrier()
