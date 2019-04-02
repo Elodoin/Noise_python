@@ -14,6 +14,8 @@ from scipy.signal import butter, lfilter, tukey, hilbert, wiener
 from scipy.linalg import svd
 from scipy.ndimage import map_coordinates
 from obspy.signal.filter import bandpass,lowpass
+from obspy.signal.regression import linear_regression
+from obspy.signal.invsim import cosine_taper
 import obspy
 from obspy.signal.util import _npts2nfft
 from obspy.core.inventory import Inventory, Network, Station, Channel, Site
@@ -809,7 +811,7 @@ def nextpow2(x):
 
     """
 
-    return np.ceil(np.log2(np.abs(x))) 	
+    return int(np.ceil(np.log2(np.abs(x)))) 	
 
 def abs_max(arr):
     """
@@ -930,90 +932,6 @@ def norm(arr):
     """ Demean and normalize a given input to unit std. """
     arr -= arr.mean(axis=1, keepdims=True)
     return (arr.T / arr.std(axis=-1)).T
-
-
-def stretch_mat_creation(refcc, str_range=0.01, nstr=1001):
-    """ Matrix of stretched instance of a reference trace.
-
-    From the MIIC Development Team (eraldo.pomponi@uni-leipzig.de)
-    The reference trace is stretched using a cubic spline interpolation
-    algorithm form ``-str_range`` to ``str_range`` (in %) for totally
-    ``nstr`` steps.
-    The output of this function is a matrix containing the stretched version
-    of the reference trace (one each row) (``strrefmat``) and the corresponding
-    stretching amount (`strvec```).
-    :type refcc: :class:`~numpy.ndarray`
-    :param refcc: 1d ndarray. The reference trace that will be stretched
-    :type str_range: float
-    :param str_range: Amount, in percent, of the desired stretching (one side)
-    :type nstr: int
-    :param nstr: Number of stretching steps (one side)
-    :rtype: :class:`~numpy.ndarray` and float
-    :return: **strrefmat**: 2d ndarray of stretched version of the reference trace.
-    :rtype: float
-    :return: **strvec**: List of float, stretch amount for each row of ``strrefmat``
-    """
-
-    n = len(refcc)
-    samples_idx = np.arange(-n // 2 + 1, n // 2 + 1)
-    strvec = np.linspace(1 - str_range, 1 + str_range, nstr)
-    str_timemat = samples_idx / strvec[:,None] + n // 2
-    tiled_ref = np.tile(refcc,(nstr,1))
-    coord = np.vstack([(np.ones(tiled_ref.shape) * np.arange(tiled_ref.shape[0])[:,None]).flatten(),str_timemat.flatten()])
-    strrefmat = map_coordinates(tiled_ref, coord)
-    strrefmat = strrefmat.reshape(tiled_ref.shape)
-    return strrefmat, strvec
-
-
-def stretch(data,ref,str_range=0.05,nstr=1001):
-    """
-    Stretching technique for dt/t. 
-
-    :type data: :class:`~numpy.ndarray`
-    :param data: 2d ndarray. Cross-correlation measurements.
-    :type ref: :class:`~numpy.ndarray`
-    :param ref: 1d ndarray. The reference trace that will be stretched
-    :type str_range: float
-    :param str_range: Amount, in percent, of the desired stretching (one side)
-    :type nstr: int
-    :param nstr: Number of stretching steps (one side)
-    :rtype: :class:`~numpy.ndarray` 
-    :return: **alldeltas**: dt/t for each cross-correlation
-    :rtype: :class:`~numpy.ndarray`
-    :return: **allcoefs**: Maximum correlation coefficient for each 
-         cross-correlation against the reference trace
-    :rtype: :class:`~numpy.ndarray`
-    :return: **allerrs**: Error for each dt/t measurement
-
-    """
-    ref_stretched, deltas = stretch_mat_creation(ref,str_range=str_range,nstr=nstr)
-    M,N = data.shape
-
-    alldeltas = np.empty(M,dtype=float)
-    allcoefs = np.empty(M,dtype=float)
-    allerrs = np.empty(M,dtype=float)
-    x = np.arange(nstr)
-
-    for ii in np.arange(M).tolist():
-        coeffs = vcorrcoef(ref_stretched,data[ii,:])
-        coeffs_shift = coeffs + np.abs(np.min([0,np.min(coeffs)]))
-        fw = FWHM(x,coeffs_shift)
-        alldeltas[ii] = deltas[np.argmax(coeffs)]
-        allcoefs[ii] = np.max(coeffs)
-        allerrs[ii] = fw/2
-    
-    return alldeltas, allcoefs, allerrs
-
-def FWHM(x,y):
-    """
-
-    Fast, naive calculation of full-width at half maximum. 
-
-    """
-    half_max = np.max(y) / 2.
-    left_idx = np.where(y - half_max > 0)[0][0]
-    right_idx = np.where(y - half_max > 0)[0][-1]
-    return x[right_idx] - x[left_idx]
 
 
 def pole_zero(inv): 
@@ -1295,6 +1213,272 @@ def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):
 		denoised_img = wiener(img_to_denoise,Ntau,np.mean(temp))
 
 	return denoised_img
+
+def Stretching_current(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, tmin, tmax):
+    """
+    Stretching function: 
+    This function compares the Reference waveform to stretched/compressed current waveforms to get the relative seismic velocity variation (and associated error).
+    It also computes the correlation coefficient between the Reference waveform and the current waveform.
+
+    modified based on the script from L. Viens 04/26/2018 (Viens et al., 2018 JGR)
+
+    INPUTS:
+        - ref = Reference waveform (np.ndarray, size N)
+        - cur = Current waveform (np.ndarray, size N)
+        - t = time vector, common to both ref and cur (np.ndarray, size N)
+        - dvmin = minimum bound for the velocity variation; example: dvmin=-0.03 for -3% of relative velocity change ('float')
+        - dvmax = maximum bound for the velocity variation; example: dvmax=0.03 for 3% of relative velocity change ('float')
+        - nbtrial = number of stretching coefficient between dvmin and dvmax, no need to be higher than 100  ('float')
+        - window = vector of the indices of the cur and ref windows on wich you want to do the measurements (np.ndarray, size tmin*delta:tmax*delta)
+        For error computation:
+            - fmin = minimum frequency of the data
+            - fmax = maximum frequency of the data
+            - tmin = minimum time window where the dv/v is computed 
+            - tmax = maximum time window where the dv/v is computed 
+
+    OUTPUTS:
+        - dv = Relative velocity change dv/v (in %)
+        - cc = correlation coefficient between the reference waveform and the best stretched/compressed current waveform
+        - cdp = correlation coefficient between the reference waveform and the initial current waveform
+        - error = Errors in the dv/v measurements based on Weaver, R., C. Hadziioannou, E. Larose, and M. Camnpillo (2011), On the precision of noise-correlation interferometry, Geophys. J. Int., 185(3), 1384?1392
+
+    The code first finds the best correlation coefficient between the Reference waveform and the stretched/compressed current waveform among the "nbtrial" values. 
+    A refined analysis is then performed around this value to obtain a more precise dv/v measurement .
+    """ 
+    Eps = 1+(np.linspace(dvmin, dvmax, nbtrial))
+    Cof = np.zeros(Eps.shape,dtype=np.float32)
+
+    # Set of stretched/compressed current waveforms
+    for ii in range(len(Eps)):
+        nt = t*Eps[ii]
+        s = np.interp(x=t, xp=nt, fp=cur[window])
+        waveform_ref = ref[window]
+        waveform_cur = s
+        Cof[ii] = np.corrcoef(waveform_ref, waveform_cur)[0, 1]
+
+    cdp = np.corrcoef(cur[window], ref[window])[0, 1] # correlation coefficient between the reference and initial current waveforms
+
+    # find the maximum correlation coefficient
+    imax = np.nanargmax(Cof)
+    if imax >= len(Eps)-2:
+        imax = imax - 2
+    if imax <= 2:
+        imax = imax + 2
+
+    # Proceed to the second step to get a more precise dv/v measurement
+    dtfiner = np.linspace(Eps[imax-2], Eps[imax+2], 100)
+    ncof    = np.zeros(dtfiner.shape,dtype=np.float32)
+    for ii in range(len(dtfiner)):
+        nt = t*dtfiner[ii]
+        s = np.interp(x=t, xp=nt, fp=cur[window])
+        waveform_ref = ref[window]
+        waveform_cur = s
+        ncof[ii] = np.corrcoef(waveform_ref, waveform_cur)[0, 1]
+
+    cc = np.max(ncof) # Find maximum correlation coefficient of the refined  analysis
+    dv = 100. * dtfiner[np.argmax(ncof)]-100 # Multiply by 100 to convert to percentage (Epsilon = -dt/t = dv/v)
+
+    # Error computation based on Weaver, R., C. Hadziioannou, E. Larose, and M. Camnpillo (2011), On the precision of noise-correlation interferometry, Geophys. J. Int., 185(3), 1384?1392
+    T = 1 / (fmax - fmin)
+    X = cc
+    wc = np.pi * (fmin + fmax)
+    t1 = np.min([tmin, tmax])
+    t2 = np.max([tmin, tmax])
+    error = 100*(np.sqrt(1-X**2)/(2*X)*np.sqrt((6* np.sqrt(np.pi/2)*T)/(wc**2*(t2**3-t1**3))))
+
+    return dv, cc, cdp, error
+
+
+def smooth(x, window='boxcar', half_win=3):
+    """ some window smoothing """
+    # TODO: docsting
+    window_len = 2 * half_win + 1
+    # extending the data at beginning and at the end
+    # to apply the window at the borders
+    s = np.r_[x[window_len - 1:0:-1], x, x[-1:-window_len:-1]]
+    if window == "boxcar":
+        w = scipy.signal.boxcar(window_len).astype('complex')
+    else:
+        w = scipy.signal.hanning(window_len).astype('complex')
+    y = np.convolve(w / w.sum(), s, mode='valid')
+    return y[half_win:len(y) - half_win]
+
+
+def getCoherence(dcs, ds1, ds2):
+    # TODO: docsting
+    n = len(dcs)
+    coh = np.zeros(n).astype('complex')
+    valids = np.argwhere(np.logical_and(np.abs(ds1) > 0, np.abs(ds2) > 0))
+    coh[valids] = dcs[valids] / (ds1[valids] * ds2[valids])
+    coh[coh > (1.0 + 0j)] = 1.0 + 0j
+    return coh
+
+def mwcs_dvv(ref, cur, moving_window_length, slide_step, delta, window, fmin, fmax, tmin, smoothing_half_win=5):
+    #mwcs_dvv(ref, cur, t, dvmin, dvmax, nbtrial, window, fmin, fmax, tmin, tmax):
+    """
+    modified sub-function from MSNoise package by Thomas Lecocq. download from
+    https://github.com/ROBelgium/MSNoise/tree/master/msnoise
+
+    combine the mwcs and dv/v functionality of MSNoise into a single function
+
+    ref: The "Reference" timeseries
+    cur: The "Current" timeseries
+    moving_window_length: The moving window length (in seconds)
+    slide_step: The step to jump for the moving window (in seconds)
+    delta: The sampling rate of the input timeseries (in Hz)
+    window: The target window for measuring dt/t
+    fmin: The lower frequency bound to compute the dephasing (in Hz)
+    fmax: The higher frequency bound to compute the dephasing (in Hz)
+    tmin: The leftmost time lag (used to compute the "time lags array")
+    smoothing_half_win: If different from 0, defines the half length of
+        the smoothing hanning window.
+    :returns: [time_axis,delta_t,delta_err,delta_mcoh]. time_axis contains the
+        central times of the windows. The three other columns contain dt, error and
+        mean coherence for each window.
+    """
+    
+    ##########################
+    #-----part I: mwcs-------
+    ##########################
+    delta_t = []
+    delta_err = []
+    delta_mcoh = []
+    time_axis = []
+
+    window_length_samples = np.int(moving_window_length * delta)
+    padd = int(2 ** (nextpow2(window_length_samples) + 2))
+    count = 0
+    tp = cosine_taper(window_length_samples, 0.85)
+
+    #----does minind really start from 0??-----
+    minind = 0
+    maxind = window_length_samples
+
+    #-------loop through all sub-windows-------
+    while maxind <= len(window):
+        cci = cur[window[minind:maxind]]
+        cci = scipy.signal.detrend(cci, type='linear')
+        cci *= tp
+
+        cri = ref[window[minind:maxind]]
+        cri = scipy.signal.detrend(cri, type='linear')
+        cri *= tp
+
+        minind += int(slide_step*delta)
+        maxind += int(slide_step*delta)
+
+        #-------------get the spectrum-------------
+        fcur = scipy.fftpack.fft(cci, n=padd)[:padd // 2]
+        fref = scipy.fftpack.fft(cri, n=padd)[:padd // 2]
+
+        fcur2 = np.real(fcur) ** 2 + np.imag(fcur) ** 2
+        fref2 = np.real(fref) ** 2 + np.imag(fref) ** 2
+
+        # Calculate the cross-spectrum
+        X = fref * (fcur.conj())
+        if smoothing_half_win != 0:
+            dcur = np.sqrt(smooth(fcur2, window='hanning',half_win=smoothing_half_win))
+            dref = np.sqrt(smooth(fref2, window='hanning',half_win=smoothing_half_win))
+            X = smooth(X, window='hanning',half_win=smoothing_half_win)
+        else:
+            dcur = np.sqrt(fcur2)
+            dref = np.sqrt(fref2)
+
+        dcs = np.abs(X)
+
+        # Find the values the frequency range of interest
+        freq_vec = scipy.fftpack.fftfreq(len(X) * 2, 1. / delta)[:padd // 2]
+        index_range = np.argwhere(np.logical_and(freq_vec >= fmin,freq_vec <= fmax))
+
+        # Get Coherence and its mean value
+        coh = getCoherence(dcs, dref, dcur)
+        mcoh = np.mean(coh[index_range])
+
+        # Get Weights
+        w = 1.0 / (1.0 / (coh[index_range] ** 2) - 1.0)
+        w[coh[index_range] >= 0.99] = 1.0 / (1.0 / 0.9801 - 1.0)
+        w = np.sqrt(w * np.sqrt(dcs[index_range]))
+        w = np.real(w)
+
+        # Frequency array:
+        v = np.real(freq_vec[index_range]) * 2 * np.pi
+
+        # Phase:
+        phi = np.angle(X)
+        phi[0] = 0.
+        phi = np.unwrap(phi)
+        phi = phi[index_range]
+
+        # Calculate the slope with a weighted least square linear regression
+        # forced through the origin
+        # weights for the WLS must be the variance !
+        m, em = linear_regression(v.flatten(), phi.flatten(), w.flatten())
+
+        delta_t.append(m)
+
+        # print phi.shape, v.shape, w.shape
+        e = np.sum((phi - m * v) ** 2) / (np.size(v) - 1)
+        s2x2 = np.sum(v ** 2 * w ** 2)
+        sx2 = np.sum(w * v ** 2)
+        e = np.sqrt(e * s2x2 / sx2 ** 2)
+
+        delta_err.append(e)
+        delta_mcoh.append(np.real(mcoh))
+        time_axis.append(tmin+moving_window_length/2.+count*slide_step)
+        count += 1
+
+        del fcur, fref
+        del X
+        del freq_vec
+        del index_range
+        del w, v, e, s2x2, sx2, m, em
+
+    if maxind > len(cur) + slide_step*delta:
+        print("The last window was too small, but was computed")
+
+    delta_t = np.array(delta_t)
+    delta_err = np.array(delta_err)
+    delta_mcoh = np.array(delta_mcoh)
+    time_axis  = np.array(time_axis)
+
+    #####################################
+    #-----------part II: dv/v------------
+    #####################################
+    delta_mincho = 0.65
+    delta_maxerr = 0.1
+    delta_maxdt  = 0.1
+    indx1 = np.where(delta_mcoh>delta_mincho)
+    indx2 = np.where(delta_err<delta_maxerr)
+    indx3 = np.where(delta_t<delta_maxdt)
+
+    #-----find good dt measurements-----
+    indx = np.intersect1d(indx1,indx2)
+    indx = np.intersect1d(indx,indx3)
+
+    #----estimate weight for regression----
+    w = 1/delta_err[indx]
+    w[~np.isfinite(w)] = 1.0
+
+    #---------do linear regression-----------
+    #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
+    m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+
+    return np.array([-m0*100,em0*100]).T
+
+
+def wavg_wstd(data, errors):
+    '''
+    estimate the weights for doing linear regression in order to get dt/t
+    '''
+
+    d = data
+    errors[errors == 0] = 1e-6
+    w = 1. / errors
+    wavg = (d * w).sum() / w.sum()
+    N = len(np.nonzero(w)[0])
+    wstd = np.sqrt(np.sum(w * (d - wavg) ** 2) / ((N - 1) * np.sum(w) / N))
+    return wavg, wstd
+
 
 if __name__ == "__main__":
     pass

@@ -155,6 +155,13 @@ for ii in range(rank,splits+size-extra,size):
 
                     #----------------copy the parameter information---------------
                     parameters  = ds.auxiliary_data[data_type][rlist[0]].parameters
+                    ndt = parameters['dt']
+                    nmaxlag = parameters['lag']
+
+                    #------double check dt and maxlag-------
+                    if ndt != dt or nmaxlag != maxlag:
+                        raise ValueError('dt or maxlag parameters not correctly set in the beginning')
+
                     for path in rlist:
 
                         #--------cross component-------
