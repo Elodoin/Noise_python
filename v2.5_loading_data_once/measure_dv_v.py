@@ -20,20 +20,20 @@ nsta = len(sta)
 #----some common variables-----
 epsilon = 0.01
 nbtrial = 50
-tmin = 10
+tmin = 20
 tmax = 50
 fmin = 0.3
 fmax = 0.5
-comp = 'TT'
+comp = 'ZZ'
 maxlag = 100
 stretch = True
-mwcs_flag = True
+mwcs_flag = False
 
 #----for plotting-----
 Mdate = 12
 NSV   = 2
 
-h5file = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.ABHM/E.ABHM_E.KKSM.h5'
+h5file = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK1/E.ABHM/test/E.ABHM_E.OHSM.h5'
 
 #-------open ASDF file to read data-----------
 with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
@@ -62,9 +62,13 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
         for ii in range(ndays):
             trlist = ds.auxiliary_data[slist[ii]].list()
             if comp in rlist:
-                tdata = ds.auxiliary_data[slist[ii]][comp].data[indx1:indx2+1]
-                data[ii,:] = bandpass(tdata,fmin,fmax,int(1/delta),corners=4, zerophase=True)
-                #data[ii,:] = data[ii,:]/max(data[ii,:])
+                
+                try:
+                    tdata = ds.auxiliary_data[slist[ii]][comp].data[indx1:indx2+1]
+                    data[ii,:] = bandpass(tdata,fmin,fmax,int(1/delta),corners=4, zerophase=True)
+                    data[ii,:] = data[ii,:]/max(data[ii,:])
+                except Exception:
+                    data[ii,:] = np.zeros(indx2-indx1+1,dtype=np.float32)
 
         fig,ax = plt.subplots(2,sharex=True)
         ax[0].matshow(data/data.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
@@ -84,7 +88,7 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
 
         #-------parameters for doing stretching-------
         tvec = np.arange(tmin,tmax,delta)
-        ref  = data[0,:]
+        ref  = new[0,:]
         window = np.arange(int(tmin/delta),int(tmax/delta))+int(maxlag/delta)
 
         #--------parameters to store dv/v and cc--------
@@ -102,7 +106,7 @@ with pyasdf.ASDFDataSet(h5file,mode='r') as ds:
 
         #------loop through the reference waveforms------
         for ii in range(1,ndays):
-            cur = data[ii,:]
+            cur = new[ii,:]
 
             #----plug in the stretching function-------
             if stretch:

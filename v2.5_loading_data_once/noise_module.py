@@ -2,7 +2,6 @@ import os
 import glob
 import datetime
 import copy
-import time
 import matplotlib.pyplot as plt
 from numba import jit
 import pyasdf
@@ -10,9 +9,8 @@ import pandas as pd
 import numpy as np
 import scipy
 from scipy.fftpack import fft,ifft,next_fast_len
-from scipy.signal import butter, lfilter, tukey, hilbert, wiener
+from scipy.signal import butter, hilbert, wiener
 from scipy.linalg import svd
-from scipy.ndimage import map_coordinates
 from obspy.signal.filter import bandpass,lowpass
 from obspy.signal.regression import linear_regression
 from obspy.signal.invsim import cosine_taper
@@ -1147,48 +1145,6 @@ def stats_to_dict(stats,stat_type):
                  '{}_sampling_rate'.format(stat_type):stats['sampling_rate']}
     return stat_dict 
 
-def stack_parameters(params):
-    """
-    Creates parameter dict for monthly stack.
-
-    :type params: list (of dicts)
-    :param params: List of dicts, created by cross_corr_parameters, for daily cross-correlations
-
-    """
-
-    month = params[0]
-    for day in params[1:]:
-        month['ccf_windows'].append(day['ccf_windows'])
-        month['start_day'].append(day['start_day'])
-        month['start_month'].append(day['start_month'])
-        month['end_day'].append(day['end_day'])
-    month['end_year'].append(day['end_year'])	
-    month['end_hour'].append(day['end_hour'])	
-    month['end_minute'].append(day['end_minute'])
-    month['end_second'].append(day['end_second'])
-    month['end_microsecond'].append(day['end_microsecond'])
-    return month
-
-def vcorrcoef(X,y):
-    """
-    Vectorized Cross-correlation coefficient in the time domain
-
-    :type X: `~numpy.ndarray`
-    :param X: Matrix containing time series in each row (ndim==2)
-    :type X: `~numpy.ndarray`
-    :param X: time series array (ndim==1)
-    
-    :rtype:  `~numpy.ndarray`
-    :return: **cc** array of cross-correlation coefficient between rows of X and y
-    """
-    
-    Xm = np.reshape(np.mean(X,axis=1),(X.shape[0],1))
-    ym = np.mean(y)
-    cc_num = np.sum((X-Xm)*(y-ym),axis=1)
-    cc_den = np.sqrt(np.sum((X-Xm)**2,axis=1)*np.sum((y-ym)**2))
-    cc = cc_num/cc_den
-    return cc
-
 def NCF_denoising(img_to_denoise,Mdate,Ntau,NSV):
 
 	if img_to_denoise.ndim ==2:
@@ -1455,13 +1411,19 @@ def mwcs_dvv(ref, cur, moving_window_length, slide_step, delta, window, fmin, fm
     indx = np.intersect1d(indx1,indx2)
     indx = np.intersect1d(indx,indx3)
 
-    #----estimate weight for regression----
-    w = 1/delta_err[indx]
-    w[~np.isfinite(w)] = 1.0
+    if len(indx) >2:
 
-    #---------do linear regression-----------
-    #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
-    m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+        #----estimate weight for regression----
+        w = 1/delta_err[indx]
+        w[~np.isfinite(w)] = 1.0
+
+        #---------do linear regression-----------
+        #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
+        m0, em0 = linear_regression(time_axis[indx], delta_t[indx], w,intercept_origin=True)
+    
+    else:
+        print('not enough points to estimate dv/v')
+        m0=0;em0=0
 
     return np.array([-m0*100,em0*100]).T
 

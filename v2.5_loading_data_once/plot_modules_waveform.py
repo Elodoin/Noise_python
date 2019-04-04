@@ -208,7 +208,7 @@ def plot_moveout(sfile,freqmin,freqmax,net1=None,sta1=None,comp1=None):
             plt.show()
 
 
-def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None):            
+def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None,tag=None):            
     '''
     this script plots the cross-correlation functions for the station pair of sta1-sta2
     and component 1 and component 2 filtered at freq bands of freqmin-freqmax. if no 
@@ -221,6 +221,8 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None):
     afiles = sorted(glob.glob(os.path.join(sdir,'*.h5')))
     if not maxlag:
         maxlag = 100
+    if not tag:
+        tag = 'Allstacked'
 
     #-----------get all tags-------------
     with pyasdf.ASDFDataSet(afiles[0],mode='r') as ds:
@@ -230,7 +232,7 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None):
 
     mdist=0
     #----all stacked days-----
-    for itag in tags:
+    if tag in tags:
         plt.figure(figsize=(9,6))
 
         #-------all receivers--------
@@ -240,11 +242,11 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None):
                 slist = ds.auxiliary_data.list()
                 
                 #----check that day exist---
-                if itag in slist:
+                if tag in slist:
                     
                     #---------read parameters and copy data-----------
-                    dist = ds.auxiliary_data[itag][ccomp].parameters['dist']
-                    data = ds.auxiliary_data[itag][ccomp].data[:]
+                    dist = ds.auxiliary_data[tag][ccomp].parameters['dist']
+                    data = ds.auxiliary_data[tag][ccomp].data[:]
                     data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
                     data = data/max(data)
                     npts = len(data)
@@ -253,7 +255,7 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None):
                     if tindx>indx0:
                         raise ValueError('tindx larger than indx0')
                     plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+dist,'k',linewidth=0.8)
-                    plt.title('%s %s %s filtered @%4.1f-%4.1f Hz' % (sdir.split('/')[-1],itag,ccomp,freqmin,freqmax))
+                    plt.title('%s %s %s filtered @%4.1f-%4.1f Hz' % (sdir.split('/')[-1],tag,ccomp,freqmin,freqmax))
                     plt.xlabel('time (s)')
                     plt.ylabel('offset (km)')
                     plt.text(maxlag*0.9,dist+0.5,receiver,fontsize=6)
@@ -458,7 +460,7 @@ def plot_cc_withtime_stack(ccffile,freqmin,freqmax,ccomp,maxlag=None):
     plot the filtered cross-correlation functions between station-pair sta1-sta2
     for all of the available days stored in ccfdir
 
-    example: plot_cc_withtime('/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.AYHM/E.AYHM_E.ENZM.h5,1,5,'ZZ',50) 
+    example: plot_cc_withtime('/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.AYHM/E.AYHM_E.ENZM.h5',1,5,'ZZ',50) 
     '''
     #---basic parameters----
     if not maxlag:
@@ -474,17 +476,24 @@ def plot_cc_withtime_stack(ccffile,freqmin,freqmax,ccomp,maxlag=None):
             #-----loop through each day-----
             slist = ds.auxiliary_data.list()
 
-            for ii in range(len(slist)):
+            for ii in range(len(slist)-1):
                 if ii%60==0:
                     plt.figure(figsize=(9,6))
 
                 iday = slist[ii]
 
-                data = ds.auxiliary_data[iday][ccomp].data[:]
-                data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
-                #--normalize the data----
-                data = data/max(data)
-                npts = len(data)
+                #-----in case there is no data on that day-----
+                try:
+                    data = ds.auxiliary_data[iday][ccomp].data[:]
+                    data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
+                    
+                    #--normalize the data----
+                    data = data/max(data)
+
+                except Exception:
+                    data = np.zeros(tt.shape,dtype=np.float32)
+                
+                npts = len(data)                
                 #----make index----
                 indx0 = npts//2
                 tindx = int(maxlag/dt)
@@ -496,12 +505,7 @@ def plot_cc_withtime_stack(ccffile,freqmin,freqmax,ccomp,maxlag=None):
                 plt.text(maxlag*0.7,ii*2,iday,fontsize=6)
 
             plt.grid(True)
-            #data = ds.auxiliary_data['Allstacked'][ccomp].data[:]
-            #data = bandpass(data,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
-            #data = data/max(data)
-            #indx0= len(data)//2
-            #plt.plot(tt,data[indx0-tindx:indx0+tindx+1]+ii*2+2,'b-',linewidth=1)
-            #plt.plot(tt,data[indx0-tindx:indx0+tindx+1],'b-',linewidth=1)
+
             #---------highlight zero time------------
             plt.plot([0,0],[0,ii*2],'r--',linewidth=1.5)
             plt.title('%s %s, dist:%6.1fkm @%4.1f-%4.1f Hz' % (ccffile.split('/')[-1],ccomp,dist,freqmin,freqmax))

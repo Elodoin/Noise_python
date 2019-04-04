@@ -14,6 +14,7 @@ import h5py
 import pandas as pd
 from mpi4py import MPI
 
+
 '''
 this script pre-processs the noise data for each single station using the parameters given below 
 and stored the whitened and nomalized fft trace for each station in a HDF5 file as *.h5.
@@ -28,7 +29,7 @@ script of S1_savASDF_v2.2
 t00=time.time()
 
 rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
-FFTDIR = os.path.join(rootpath,'FFT')
+FFTDIR = os.path.join(rootpath,'FFT1')
 locations = os.path.join(rootpath,'station.lst')
 event = os.path.join(rootpath,'noise_data/Event_2011_*')
 #--------think about how to simplify this----------

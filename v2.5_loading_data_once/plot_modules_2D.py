@@ -39,10 +39,11 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None,tag=None):
     #--------index for the data---------
     indx1 = int((lag-maxlag)/delta)
     indx2 = int((lag+maxlag)/delta)
-    t     = np.arange(0,indx2-indx1+1,400)*delta-maxlag
+    t     = np.arange(0,indx2-indx1+1,800)*delta-maxlag
 
     #------initialize the array--------
     data = np.zeros((nsta,indx2-indx1+1),dtype=np.float32)
+    dist = np.zeros(nsta,dtype=np.float32)
     Ntau  = int(np.ceil(np.min([1/freqmin,1/freqmax])/delta)) + 15
     Mdate = 12
     NSV   = 2
@@ -58,22 +59,30 @@ def plot_moveout_stack(sdir,freqmin,freqmax,ccomp,maxlag=None,tag=None):
                         tdata = ds.auxiliary_data[tag][ccomp].data[indx1:indx2+1]
                     except Exception:
                         continue
+
+                    #---------filter the data---------
                     data[ii,:] = bandpass(tdata,freqmin,freqmax,int(1/delta),corners=4, zerophase=True)
-                    #data[ii,:] = data[ii,:]/max(data[ii,:])
+                    data[ii,:] = data[ii,:]/max(data[ii,:])
+                    #----------keep a track of distance info---------
+                    dist[ii]   = ds.auxiliary_data[tag][ccomp].parameters['dist']
 
+    #----sort the data using dist-----
+    new_orders = np.argsort(dist)
+
+    #-------plotting the move-out-------
     fig,ax = plt.subplots(2,sharex=True)
-    ax[0].matshow(data/data.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
-    new = noise_module.NCF_denoising(data,np.min([Mdate,data.shape[0]]),Ntau,NSV)
+    ax[0].matshow(data[new_orders][:],cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
+    new = noise_module.NCF_denoising(data[new_orders][:],np.min([Mdate,data.shape[0]]),Ntau,NSV)
 
-    ax[1].matshow(new/new.max(),cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
+    ax[1].matshow(new,cmap='seismic',extent=[-maxlag,maxlag,data.shape[0],1],aspect='auto')
     ax[0].set_title('Filterd Cross-Correlations %s' % (sdir.split('/')[-1]))
     ax[1].set_title('Denoised Cross-Correlations')
     ax[0].xaxis.set_visible(False)
-    ax[0].set_ylabel('Day index')
+    ax[0].set_ylabel('Distance [km]')
     ax[1].set_xticks(t)
     ax[1].xaxis.set_ticks_position('bottom')
     ax[1].set_xlabel('Time [s]')
-    ax[1].set_ylabel('Day index')
+    ax[1].set_ylabel('Distance [km]')
     plt.show() 
 
 
