@@ -221,129 +221,130 @@ for ii in range(rank,splits+size-extra,size):
                         findx = tt*ncomp+icomp
                         corr[findx] /= nflag[tt,icomp]
 
-            #------stack the CCFs------
-            for isday in range(nstack):
+            if nstack > 1:
+                #------stack the CCFs------
+                for isday in range(nstack):
 
-                indx1 = isday*stack_days
-                if isday == nstack-1:
-                    indx2 = ndays-1
-                else:
-                    indx2 = (indx1+stack_days)
+                    indx1 = isday*stack_days
+                    if isday == nstack-1:
+                        indx2 = ndays-1
+                    else:
+                        indx2 = (indx1+stack_days)
 
-                #--break the loop---
-                if indx1 == indx2:
-                    break
+                    #--break the loop---
+                    if indx1 == indx2:
+                        break
 
-                #--------start and end day information--------
-                date_s = ccfs[indx1].split('/')[-1].split('.')[0]
-                date_s = date_s.replace('_','')
-                date_e = ccfs[indx2].split('/')[-1].split('.')[0]
-                date_e = date_e.replace('_','')
+                    #--------start and end day information--------
+                    date_s = ccfs[indx1].split('/')[-1].split('.')[0]
+                    date_s = date_s.replace('_','')
+                    date_e = ccfs[indx2].split('/')[-1].split('.')[0]
+                    date_e = date_e.replace('_','')
 
-                if flag:
-                    print('write the stacked data to ASDF between %s and %s' % (date_s,date_e))
+                    if flag:
+                        print('write the stacked data to ASDF between %s and %s' % (date_s,date_e))
 
-                #------------------output path and file name----------------------
-                crap   = np.zeros(int(2*maxlag/dt)+1,dtype=np.float32)
+                    #------------------output path and file name----------------------
+                    crap   = np.zeros(int(2*maxlag/dt)+1,dtype=np.float32)
 
-                #------in case it already exists------
-                if not os.path.isfile(stack_h5):
+                    #------in case it already exists------
+                    if not os.path.isfile(stack_h5):
+                        with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
+                            pass 
+
                     with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
-                        pass 
 
-                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as stack_ds:
+                        tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
+                        #-----loop through all E-N-Z components-----
+                        for jj in range(ncomp):
+                            icomp  = enz_components[jj]
+                            tindx1 = np.arange(indx1,indx2,1)
+                            tindx2 = np.where(nflag[tindx1,jj]>0)[0]
+                            indx   = tindx1[tindx2]*ncomp+jj
 
-                    tcorr = np.zeros((ncomp,int(2*maxlag/dt)+1),dtype=np.float32)
-                    #-----loop through all E-N-Z components-----
-                    for jj in range(ncomp):
-                        icomp  = enz_components[jj]
-                        tindx1 = np.arange(indx1,indx2,1)
-                        tindx2 = np.where(nflag[tindx1,jj]>0)[0]
-                        indx   = tindx1[tindx2]*ncomp+jj
+                            #-----accumulated good hours--------
+                            tngood = 0
+                            for tii in tindx1[tindx2]:
+                                tngood += ngood[tii,jj]
+                            new_parameters = parameters
+                            new_parameters['ngood'] = tngood
 
-                        #-----accumulated good hours--------
-                        tngood = 0
-                        for tii in tindx1[tindx2]:
-                            tngood += ngood[tii,jj]
-                        new_parameters = parameters
-                        new_parameters['ngood'] = tngood
-
-                        #-----break if no good data in the stacking-days-----
-                        if len(indx)==0:
-                            continue
-
-                        #------do average-----
-                        tcorr[jj] = np.mean(corr[indx],axis=0)
-
-                        if flag:
-                            print('estimate the SNR of component %s for %s_%s in E-N-Z system' % (enz_components[jj],source,receiver))
-                        
-                        #--------evaluate the SNR of the signal at target period range-------
-                        #new_parameters = noise_module.get_SNR(tcorr[jj],snr_parameters,parameters)
-
-                        #------save the time domain cross-correlation functions-----
-                        data_type = 'F'+date_s+'T'+date_e
-                        path = icomp
-                        crap = tcorr[jj]
-                        stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
-
-                    #-------do rotation here if needed---------
-                    if do_rotation:
-                        if flag:
-                            print('doing matrix rotation now!')
-
-                        #---read azi, baz info---
-                        azi = new_parameters['azi']
-                        baz = new_parameters['baz']
-
-                        #---angles to be corrected----
-                        if correction:
-                            ind = sta_list.index(staS)
-                            acorr = angles[ind]
-                            ind = sta_list.index(staR)
-                            bcorr = angles[ind]
-                            cosa = np.cos((azi+acorr)*pi/180)
-                            sina = np.sin((azi+acorr)*pi/180)
-                            cosb = np.cos((baz+bcorr)*pi/180)
-                            sinb = np.sin((baz+bcorr)*pi/180)
-                        else:
-                            cosa = np.cos(azi*pi/180)
-                            sina = np.sin(azi*pi/180)
-                            cosb = np.cos(baz*pi/180)
-                            sinb = np.sin(baz*pi/180)
-
-                        #------9 component tensor rotation 1-by-1------
-                        for jj in range(len(rtz_components)):
-                            
-                            if jj==0:
-                                crap = -cosb*tcorr[7]-sinb*tcorr[6]
-                            elif jj==1:
-                                crap = sinb*tcorr[7]-cosb*tcorr[6]
-                            elif jj==2:
-                                crap = tcorr[8]
+                            #-----break if no good data in the stacking-days-----
+                            if len(indx)==0:
                                 continue
-                            elif jj==3:
-                                crap = -cosa*cosb*tcorr[4]-cosa*sinb*tcorr[3]-sina*cosb*tcorr[1]-sina*sinb*tcorr[0]
-                            elif jj==4:
-                                crap = cosa*sinb*tcorr[4]-cosa*cosb*tcorr[3]+sina*sinb*tcorr[1]-sina*cosb*tcorr[0]
-                            elif jj==5:
-                                crap = cosa*tcorr[5]+sina*tcorr[2]
-                            elif jj==6:
-                                crap = sina*cosb*tcorr[4]+sina*sinb*tcorr[3]-cosa*cosb*tcorr[1]-cosa*sinb*tcorr[0]
-                            elif jj==7:
-                                crap = -sina*sinb*tcorr[4]+sina*cosb*tcorr[3]+cosa*sinb*tcorr[1]-cosa*cosb*tcorr[0]
-                            else:
-                                crap = -sina*tcorr[5]+cosa*tcorr[2]
+
+                            #------do average-----
+                            tcorr[jj] = np.mean(corr[indx],axis=0)
 
                             if flag:
-                                print('estimate the SNR of component %s for %s_%s in R-T-Z system' % (rtz_components[jj],source,receiver))
+                                print('estimate the SNR of component %s for %s_%s in E-N-Z system' % (enz_components[jj],source,receiver))
+                            
                             #--------evaluate the SNR of the signal at target period range-------
-                            #new_parameters = noise_module.get_SNR(crap,snr_parameters,parameters)
+                            #new_parameters = noise_module.get_SNR(tcorr[jj],snr_parameters,parameters)
 
                             #------save the time domain cross-correlation functions-----
                             data_type = 'F'+date_s+'T'+date_e
-                            path = rtz_components[jj]
+                            path = icomp
+                            crap = tcorr[jj]
                             stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
+
+                        #-------do rotation here if needed---------
+                        if do_rotation:
+                            if flag:
+                                print('doing matrix rotation now!')
+
+                            #---read azi, baz info---
+                            azi = new_parameters['azi']
+                            baz = new_parameters['baz']
+
+                            #---angles to be corrected----
+                            if correction:
+                                ind = sta_list.index(staS)
+                                acorr = angles[ind]
+                                ind = sta_list.index(staR)
+                                bcorr = angles[ind]
+                                cosa = np.cos((azi+acorr)*pi/180)
+                                sina = np.sin((azi+acorr)*pi/180)
+                                cosb = np.cos((baz+bcorr)*pi/180)
+                                sinb = np.sin((baz+bcorr)*pi/180)
+                            else:
+                                cosa = np.cos(azi*pi/180)
+                                sina = np.sin(azi*pi/180)
+                                cosb = np.cos(baz*pi/180)
+                                sinb = np.sin(baz*pi/180)
+
+                            #------9 component tensor rotation 1-by-1------
+                            for jj in range(len(rtz_components)):
+                                
+                                if jj==0:
+                                    crap = -cosb*tcorr[7]-sinb*tcorr[6]
+                                elif jj==1:
+                                    crap = sinb*tcorr[7]-cosb*tcorr[6]
+                                elif jj==2:
+                                    crap = tcorr[8]
+                                    continue
+                                elif jj==3:
+                                    crap = -cosa*cosb*tcorr[4]-cosa*sinb*tcorr[3]-sina*cosb*tcorr[1]-sina*sinb*tcorr[0]
+                                elif jj==4:
+                                    crap = cosa*sinb*tcorr[4]-cosa*cosb*tcorr[3]+sina*sinb*tcorr[1]-sina*cosb*tcorr[0]
+                                elif jj==5:
+                                    crap = cosa*tcorr[5]+sina*tcorr[2]
+                                elif jj==6:
+                                    crap = sina*cosb*tcorr[4]+sina*sinb*tcorr[3]-cosa*cosb*tcorr[1]-cosa*sinb*tcorr[0]
+                                elif jj==7:
+                                    crap = -sina*sinb*tcorr[4]+sina*cosb*tcorr[3]+cosa*sinb*tcorr[1]-cosa*cosb*tcorr[0]
+                                else:
+                                    crap = -sina*tcorr[5]+cosa*tcorr[2]
+
+                                if flag:
+                                    print('estimate the SNR of component %s for %s_%s in R-T-Z system' % (rtz_components[jj],source,receiver))
+                                #--------evaluate the SNR of the signal at target period range-------
+                                #new_parameters = noise_module.get_SNR(crap,snr_parameters,parameters)
+
+                                #------save the time domain cross-correlation functions-----
+                                data_type = 'F'+date_s+'T'+date_e
+                                path = rtz_components[jj]
+                                stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
             
             t3=time.time()
             if flag:
@@ -376,7 +377,7 @@ for ii in range(rank,splits+size-extra,size):
                     stack_ds.add_auxiliary_data(data=crap, data_type=data_type, path=path, parameters=new_parameters)
 
                 #----do rotation-----
-                if do_rotation and bad==0:
+                if do_rotation:
 
                     #------9 component tensor rotation 1-by-1------
                     for jj in range(len(rtz_components)):

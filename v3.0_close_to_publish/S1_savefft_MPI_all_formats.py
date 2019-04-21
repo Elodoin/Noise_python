@@ -5,7 +5,6 @@ from datetime import datetime
 import numpy as np
 import scipy
 from scipy.fftpack.helper import next_fast_len
-from obspy.signal.filter import bandpass
 import obspy
 import matplotlib.pyplot as plt
 import noise_module
@@ -13,6 +12,10 @@ import time
 import pyasdf
 import pandas as pd
 from mpi4py import MPI
+
+if not sys.warnoptions:
+    import warnings
+    warnings.simplefilter("ignore")
 
 '''
 this script pre-processs the noise data for each single station using the parameters given below 
@@ -26,10 +29,10 @@ codes together - think about how to optimize it!  (Apr.18.2019)
 t00=time.time()
 
 #------absolute path parameters-------
-rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/data_download'
+rootpath  = '/Users/chengxin/Documents/Harvard/Seattle'
 FFTDIR = os.path.join(rootpath,'FFT')
-event = os.path.join(rootpath,'*.h5')
-resp_dir = os.path.join(rootpath,'DATA/resp')       #needed only when resp is set to something other than 'inv'
+event = os.path.join(rootpath,'new_processing/UW*.h5')
+resp_dir = os.path.join(rootpath,'new_processing')       #needed only when resp is set to something other than 'inv'
 
 #------input file types: make sure it is asdf--------
 input_asdf  = True
@@ -42,7 +45,7 @@ if not input_asdf:
     locations = os.path.join(rootpath,'station.lst')
 
 #-----some control parameters------
-prepro      = False             #preprocess the data (correct time/downsampling/trim data/response removal)?
+prepro      = True              #preprocess the data (correct time/downsampling/trim data/response removal)?
 to_whiten   = False             #whiten the spectrum?
 time_norm   = False             #normalize the data in time domain (remove EQ and ambiguity)?
 flag        = True              #print intermediate variables and computing time for debugging purpose
@@ -55,15 +58,17 @@ if output_hdf5:
 #-----assume response has been removed in downloading process-----
 checkt  = True                  # check for traces with points bewtween sample intervals
 resp    = 'inv'                 # boolean to remove instrumental response
+use_resp_dir = False            # whether to use downloaded inventory to remove response
 
-pre_filt=[0.04,0.05,4,5]
-downsamp_freq=20
+pre_filt=[0.04,0.05,3,4]
+downsamp_freq=10
 dt=1/downsamp_freq
 cc_len=3600
 step=1800
 freqmin=0.05  
 freqmax=4
-norm_type='running_mean'
+#norm_type='running_mean'
+norm_type='one_bit'
 
 
 #---------MPI-----------
@@ -134,6 +139,14 @@ for ista in range (rank,splits+size-extra,size):
 
                 #------get traces and station inventory------
                 inv1 = ds.waveforms[temp[0]]['StationXML']
+                
+                #----to use dowonloaded inventory----
+                if use_resp_dir:
+                    inv_file = glob.glob(os.path.join(resp_dir,network+'.'+station+'.xml'))
+                    if not os.path.isfile(inv_file):
+                        raise IOError('cannot find inv files %s' % (inv_file))
+                    inv1 = obspy.read_inventory(inv_file[0],format='StationXML')
+
                 if (not inv1[0][0].latitude) or (not inv1[0][0].longitude):
                     raise ValueError('no station information in inventory! double check!')
 
@@ -159,10 +172,11 @@ for ista in range (rank,splits+size-extra,size):
                     
                     if prepro:
                         if all_tags[itag].split('_')[0] != 'raw':
-                            raise ValueError('it appears pre-processing has been performed!')
+                            #raise ValueError('it appears pre-processing has been performed!')
+                            print('warning! it appears pre-processing has been performed!')
 
                         t0=time.time()
-                        source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,resp_dir)
+                        source = noise_module.preprocess_raw(source,inv1,downsamp_freq,checkt,pre_filt,resp,resp_dir)
                         t1=time.time()
                         if flag:
                             print("prepro takes %f s" % (t1-t0))
@@ -170,7 +184,7 @@ for ista in range (rank,splits+size-extra,size):
                     #----------variables to define days with earthquakes----------
                     all_madS = noise_module.mad(source[0].data)
                     all_stdS = np.std(source[0].data)
-                    if all_madS==0 or all_stdS==0 or all_madS=='NaN' or all_stdS=='NaN':
+                    if all_madS==0 or all_stdS==0 or np.isnan(all_madS) or np.isnan(all_stdS):
                         print("continue! madS or stdS equeals to 0 for %s" % source)
                         continue
 

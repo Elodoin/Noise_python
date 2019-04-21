@@ -16,13 +16,12 @@ and save the data into ASDF data format.
 author: Marine Denolle (mdenolle@fas.harvard.edu) - 11/16/18
 
 modified by Chengxin Jiang on Feb.18.2019 to make it flexiable for downloading 
-data in a range of days instead of a whole year.
-
-add a subfunction to output the station list to a CSV file and indicate the
-provenance of the downloaded ASDF files. (Feb.22.2019)
+data in a range of days instead of a whole year. add a subfunction to output 
+the station list to a CSV file and indicate the provenance of the downloaded 
+ASDF files. (Feb.22.2019)
 
 add the option to convert the SAC/miniseed data into ASDF data format. this
-could be really useful when your daily-long SAC/miniseed files have many gaps
+could be useful when the daily-long SAC/miniseed files have many gaps (in progress)
 
 A beginning of nice NoisePy journey! 
 '''
@@ -33,10 +32,10 @@ direc="/Users/chengxin/Documents/Harvard/Kanto_basin/code/KANTO/data_download"
 client = Client('IRIS')                         # client
 NewFreq = 10                                    # resampling at X samples per seconds 
 pre_filt = [0.0005, 0.001, 40,50]               # some broadband filtering                                    # year of data
-lamin,lomin,lamax,lomax=42,-122,50,-120         # regional box: min lat, min lon, max lat, max lon
-chan='BH*'                                      # channel to download 
-net="TA"                                        # network to download
-sta="F05D"                                      # station to download
+lamin,lomin,lamax,lomax=46.9,-123,48.8,-121.1        # regional box: min lat, min lon, max lat, max lon
+chan='HH*'                                      # channel to download 
+net="UW"                                        # network to download
+sta="STOR"                                      # station to download
 start_date = '2016_05_01'
 end_date   = '2016_05_05'
 inc_days   = 5                                  # number of days for each request
@@ -94,10 +93,6 @@ for K in inv:
             raise IOError('file %s already exists!' % f1)
         
         with pyasdf.ASDFDataSet(f1,compression="gzip-3") as ds:
-                            
-            # one asdf file only takes one station inventory: only takes lat, lon and elevation information
-            sta_inv = inv.select(station=sta.code,channel=sta[0].code, starttime=starttime, endtime=endtime)
-            ds.add_stationxml(sta_inv)
 
             # loop through channels
             for chan in sta:
@@ -127,7 +122,7 @@ for K in inv:
                         # get data
                         t0=time.time()
                         tr = client.get_waveforms(network=K.code, station=sta.code, channel=chan.code, location='*', \
-                            starttime = t1, endtime=t2, attach_response=True)
+                            starttime = t1, endtime=t2)
                         t1=time.time()
 
                     except Exception as e:
@@ -156,3 +151,6 @@ for K in inv:
                             print(ds) # sanity check
                             print('downloading data %6.2f s; pre-process %6.2f s' % ((t1-t0),(t3-t2)))
 
+            #------add the inventory for all components + all time of this tation-------
+            sta_inv = client.get_stations(network=net, station=sta,level="response")
+            ds.add_stationxml(sta_inv)

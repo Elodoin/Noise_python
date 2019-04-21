@@ -145,6 +145,89 @@ def plot_cc_stack(sfile,freqmin,freqmax,ccomp,maxlag=None):
     plt.show() 
 
 
+def plot_wavefield(sdir,freqmin,freqmax,t0,excitation,tt=3,tag=None):
+    '''
+    plot the wavefield emitted at a source station. the absolute value is the sum of the
+    three components at each receiver.
+
+    input parameters:
+        sdir:    directory containing the CCFs with the same source
+        freqmin: minimum targeted frequency 
+        freqmax: maximum targeted frequency
+        t0:      the starting time of the window for estimating the seismic power
+        excitation: the direction of excited force at the source
+        tt:      the duration (s) of the window for estimating the seismic power
+        tag:     make the estimated based on either the stacked data or partly stacked data
+
+    usage:plot_wavefield('/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK/E.ABHM',0.3,0.5,20,30,'Z')
+    '''
+
+    #--------find all station pairs----------
+    afiles = sorted(glob.glob(os.path.join(sdir,'*.h5')))
+    nsta = len(afiles)
+    comp = ['R','T','Z']
+    if not tag:
+        tag = 'Allstacked'
+
+    #---------get some basic parameters---------
+    ds = pyasdf.ASDFDataSet(afiles[0],mode='r')
+    try:
+        delta = ds.auxiliary_data[tag]['ZZ'].parameters['dt']
+        lag   = ds.auxiliary_data[tag]['ZZ'].parameters['lag']
+        lonS  = ds.auxiliary_data[tag]['ZZ'].parameters['lonS']
+        latS  = ds.auxiliary_data[tag]['ZZ'].parameters['latS']
+    except Exception as error:
+        print('Abort due to %s! cannot find delta and lag'%error)
+    del ds
+
+    #----index for the data------
+    npts  = int(lag*2/delta)+1
+    indx1 = int(t0/delta)
+    indx2 = int((t0+tt)/delta)
+    indx  = npts//2
+    indx1 = indx+indx1
+    indx2 = indx+indx2
+
+    #-----arrays to store data for plotting-----
+    lonR = np.zeros(nsta,dtype=np.float32)
+    latR = np.zeros(nsta,dtype=np.float32)
+    amp  = np.zeros(nsta,dtype=np.float32)
+
+    #-----loop through each station------
+    for ista in range(nsta):
+        with pyasdf.ASDFDataSet(afiles[ista],mode='r') as ds:
+            slist = ds.auxiliary_data.list()
+
+            #----check whether stacked data exists----
+            if tag in slist:
+                rlist = ds.auxiliary_data[tag].list()
+
+                #---check whether all components exist---
+                k = 0
+                ccomp = []
+                for icomp in range(len(comp)):
+                    tcomp = excitation+comp[icomp]
+                    ccomp.append(tcomp)
+                    if tcomp in rlist:
+                        k+=1
+                
+                if k == len(comp):
+                    for icomp in range(len(ccomp)):
+                        lonR[ista] = ds.auxiliary_data[tag][ccomp[icomp]].parameters['lonR']
+                        latR[ista] = ds.auxiliary_data[tag][ccomp[icomp]].parameters['latR']
+                        tdata = ds.auxiliary_data[tag][ccomp[icomp]].data[:]
+                        tdata = bandpass(tdata,freqmin,freqmax,int(1/delta),corners=4, zerophase=True)
+                        amp[ista]  = amp[ista]+np.sum(tdata[indx1:indx2]**2)
+                    amp[ista] = np.sqrt(amp[ista]/len(ccomp))
+    
+    #------good for plotting now-------
+    if k == len(ccomp):
+        plt.scatter(lonS,latS,marker='^',s=20)
+        plt.scatter(lonR,latR,c=amp,s=15,cmap='jet')
+        plt.colorbar()
+        plt.show()
+
+
 def plot_freq_time_stack(sfile,freqmin,freqmax,ccomp,maxlag=None):
     '''
     plot the dispersive CCFs in a very narrow frequency band at freqmin-freqmax range
