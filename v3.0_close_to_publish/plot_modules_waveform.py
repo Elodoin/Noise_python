@@ -819,6 +819,7 @@ def plot_ZH_pmotion_stack(sfile,freqmin,freqmax,t0,t1,maxlag,tags=None):
     plt.xlabel('RR');plt.ylabel('ZR')
     #fig.colorbar(im,ax=ax)
     plt.colorbar(ticks=range(t0,t1),label='time [s]')
+    plt.grid(True)
     plt.show()
 
 

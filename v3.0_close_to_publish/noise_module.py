@@ -688,7 +688,10 @@ def optimized_correlate1(fft1_smoothed_abs,fft2,maxlag,dt,Nfft,nwin,method="cros
 
     if method == "coherence":
         temp = moving_ave(np.abs(fft2.reshape(fft2.size,)),10)
-        corr /= temp
+        try:
+            corr /= temp
+        except ValueError:
+            raise ValueError('smoothed spectrum has zero values')
 
     corr  = corr.reshape(nwin,Nfft//2)
     ncorr = np.zeros(shape=Nfft,dtype=np.complex64)

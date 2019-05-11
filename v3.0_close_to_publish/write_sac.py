@@ -13,14 +13,15 @@ add an option to output the CCFs into txt files for image transform analysis
 '''
 
 #------absolute path to output data-------
-STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK1/E.ABHM'
+STACKDIR = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/STACK1/E.AYHM'
 ALLFILES = glob.glob(os.path.join(STACKDIR,'*.h5'))
 COMP_OUT = ['ZZ','TT','RR']
+#COMP_OUT = ['ZR','ZT','ZZ','TR','TT','TZ','RR','RT','RZ']
 dtype    = 'Allstacked'
 
 #---output file format-----
-out_SAC = False
-out_TXT = True
+out_SAC = True
+out_TXT = False
 
 if (not out_SAC) and (not out_TXT):
     raise ValueError('out_SAC and out_TXT cannot be False at the same time')

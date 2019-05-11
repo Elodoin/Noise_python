@@ -40,7 +40,7 @@ the right beginning, so that 1) the required memory for dealing with large numbe
 
 ttt0=time.time()
 
-rootpath = '/Users/chengxin/Documents/Harvard/Seattle'
+rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/pre_processing'
 FFTDIR = os.path.join(rootpath,'FFT')
 CCFDIR = os.path.join(rootpath,'CCF')
 
@@ -53,10 +53,10 @@ downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
 step=1800
-maxlag=800              #enlarge this number if to do C3
+maxlag=500              #enlarge this number if to do C3
 method='deconv'
-start_date = '2018_05_11'
-end_date   = '2018_05_12'
+start_date = '2011_03_01'
+end_date   = '2011_03_10'
 inc_days   = 1
 
 #if auto_corr and method=='coherence':
@@ -105,7 +105,7 @@ for ii in range(rank,splits+size-extra,size):
             ntrace = ncomp*nsta
 
         #----double check the ncomp parameters by opening a few stations------
-        for jj in range(1,2):
+        for jj in range(1,5):
             with pyasdf.ASDFDataSet(sfiles[jj],mpi=False,mode='r') as ds:
                 data_types = ds.auxiliary_data.list()
                 if len(data_types) > ncomp:
@@ -310,8 +310,7 @@ for ii in range(rank,splits+size-extra,size):
                                     np.round(maxlag),dt,Nfft,len(bb),method)
                             t4=time.time()
 
-                            print(np.where(np.isnan(corr)))
-                            print('finished %s %s comp %s %s'%(staS,staR,icompS,icompR))
+                            #print('finished %s %s comp %s %s'%(staS,staR,icompS,icompR))
 
                             #---------------keep daily cross-correlation into a hdf5 file--------------
                             cc_aday_h5 = os.path.join(CCFDIR,iday+'.h5')

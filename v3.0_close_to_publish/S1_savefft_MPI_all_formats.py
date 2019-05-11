@@ -18,37 +18,39 @@ if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
 '''
-this script pre-processs the noise data for each single station using the parameters given below 
-and stored the whitened and nomalized fft trace for each station in ASDF format. 
+this script pre-processs the noise data for each single station using the parameters given below and then
+stored the whitened and nomalized fft trace for each station in ASDF format. 
 - C.Jiang, T.Clements, M.Denolle (Nov.09.2018)
 
-updated to handle SAC, MiniSeed and ASDF formate inputs. mostly just put the two
-codes together - think about how to optimize it!  (Apr.18.2019)
+updated to handle SAC, MiniSeed and ASDF formate inputs. mostly follow the same routine!  (Apr.18.2019)
+
+add a sub-function to make time-domain and freq-domain normalization on 3 components simutaneously, which 
+is expected to preserve the relative amplitude among them. (May.10.2019)
 '''
 
 t00=time.time()
 
 #------absolute path parameters-------
-rootpath  = '/Users/chengxin/Documents/Harvard/Seattle'
-FFTDIR = os.path.join(rootpath,'FFT')
-event = os.path.join(rootpath,'new_processing/UW*.h5')
+rootpath  = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
+FFTDIR = os.path.join(rootpath,'pre_processing/FFT')
+event = os.path.join(rootpath,'noise_data/Event_*')
 resp_dir = os.path.join(rootpath,'new_processing')       #needed only when resp is set to something other than 'inv'
 
 #------input file types: make sure it is asdf--------
-input_asdf  = True
-input_sac   = False
+input_asdf  = False
+input_sac   = True
 input_mseed = False
 
 #----station.lst needed for sac/mseed data----
 if not input_asdf:
-    event     = os.path.join(rootpath,'noise_data/Event_2011_*')
+    event     = os.path.join(rootpath,'noise_data/Event_*')
     locations = os.path.join(rootpath,'station.lst')
 
 #-----some control parameters------
-prepro      = True              #preprocess the data (correct time/downsampling/trim data/response removal)?
+prepro      = False             #preprocess the data (correct time/downsampling/trim data/response removal)?
 to_whiten   = False             #whiten the spectrum?
 time_norm   = False             #normalize the data in time domain (remove EQ and ambiguity)?
-flag        = True              #print intermediate variables and computing time for debugging purpose
+flag        = False             #print intermediate variables and computing time for debugging purpose
 output_asdf = True              #choose the output format between ASDF and HDF5
 output_hdf5 = False
 
@@ -60,16 +62,16 @@ checkt  = True                  # check for traces with points bewtween sample i
 resp    = 'inv'                 # boolean to remove instrumental response
 use_resp_dir = False            # whether to use downloaded inventory to remove response
 
-pre_filt=[0.04,0.05,3,4]
-downsamp_freq=10
+pre_filt=[0.04,0.05,5,8]
+downsamp_freq=20
 dt=1/downsamp_freq
 cc_len=3600
 step=1800
 freqmin=0.05  
-freqmax=4
+freqmax=5
 #norm_type='running_mean'
 norm_type='one_bit'
-
+method='deconv'
 
 #---------MPI-----------
 comm = MPI.COMM_WORLD
@@ -347,7 +349,7 @@ for ista in range (rank,splits+size-extra,size):
                     
                     if prepro:
                         t0=time.time()
-                        source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,respdir)
+                        source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,resp_dir)
                         if len(source)==0:
                             continue
                         t1=time.time()
@@ -421,7 +423,7 @@ for ista in range (rank,splits+size-extra,size):
                         if norm_type == 'one_bit': 
                             white = np.sign(white)
                         elif norm_type == 'running_mean':
-                            white = noise_module.moving_ave(white,int(1 / freqmin / 2))
+                            white = noise_module.moving_ave(white,int(1/freqmin/2))
                         source_white = scipy.fftpack.fft(white, Nfft, axis=axis)
 
                         t1=time.time()

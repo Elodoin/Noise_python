@@ -98,7 +98,7 @@ if not down_all:
             with pyasdf.ASDFDataSet(f1,compression="gzip-3") as ds:
 
                 #------add the inventory for all components + all time of this tation-------
-                sta_inv = client.get_stations(network=net, station=sta,level="response")
+                sta_inv = client.get_stations(network=net,station=sta,channel=chan,starttime = starttime, endtime=endtime,level="response")
                 ds.add_stationxml(sta_inv)
 
                 # loop through channels
