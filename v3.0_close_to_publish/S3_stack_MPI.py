@@ -21,10 +21,10 @@ this script keeps the days of missing data for some of the components
 t0=time.time()
 
 #-------------absolute path of working directory-------------
-rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW'
+rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/pre_processing'
 CCFDIR = os.path.join(rootpath,'CCF')
 FFTDIR = os.path.join(rootpath,'FFT')
-STACKDIR = os.path.join(rootpath,'STACK2')
+STACKDIR = os.path.join(rootpath,'STACK_raw')
 
 #------------make correction due to mis-orientation of instruments---------------
 correction = True
@@ -41,7 +41,7 @@ one_component = False
 stack_days = 1
 num_seg = 1
 
-maxlag = 800
+maxlag = 500
 downsamp_freq=20
 dt=1/downsamp_freq
 pi = 3.141593

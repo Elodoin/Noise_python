@@ -405,30 +405,38 @@ for ista in range (rank,splits+size-extra,size):
                     axis = dataS.ndim-1
                     Nfft = int(next_fast_len(int(dataS.shape[axis])))
 
-                    #-----to whiten or not------
-                    if to_whiten:
-                        t0=time.time()
-                        source_white = noise_module.whiten(dataS,dt,freqmin,freqmax)
-                        t1=time.time()
-                        if flag:
-                            print("spectral whitening takes %f s"%(t1-t0))
-                    else:
-                        source_white = scipy.fftpack.fft(dataS, Nfft, axis=axis)
-
                     #------to normalize in time or not------
                     if time_norm:
                         t0=time.time()   
-                        white = np.real(scipy.fftpack.ifft(source_white, Nfft, axis=axis)) #/ Nt
 
                         if norm_type == 'one_bit': 
-                            white = np.sign(white)
+                            white = np.sign(dataS)
                         elif norm_type == 'running_mean':
-                            white = noise_module.moving_ave(white,int(1/freqmin/2))
-                        source_white = scipy.fftpack.fft(white, Nfft, axis=axis)
+                            
+                            #--------convert to 1D array for smoothing in time-domain---------
+                            white = np.zeros(shape=dataS.shape,dtype=dataS.dtype)
+                            for kkk in range(N):
+                                white[kkk,:] = dataS[kkk,:]/noise_module.moving_ave(np.abs(dataS[kkk,:]),smooth_N)
 
                         t1=time.time()
                         if flag:
                             print("temporal normalization takes %f s"%(t1-t0))
+                    else:
+                        white = dataS
+
+                    #-----to whiten or not------
+                    if to_whiten:
+                        t0=time.time()
+
+                        if whiten_type == 'one_bit':
+                            source_white = noise_module.whiten(white,dt,freqmin,freqmax)
+                        elif whiten_type == 'running_mean':
+                            source_white = noise_module.whiten_smooth(white,dt,freqmin,freqmax,smooth_N)
+                        t1=time.time()
+                        if flag:
+                            print("spectral whitening takes %f s"%(t1-t0))
+                    else:
+                        source_white = scipy.fftpack.fft(white, Nfft, axis=axis)
 
                     #-------------save FFTs as ASDF files-----------------
                     crap=np.zeros(shape=(N,Nfft//2),dtype=np.complex64)

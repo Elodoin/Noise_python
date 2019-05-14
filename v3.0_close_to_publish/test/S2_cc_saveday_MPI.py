@@ -54,9 +54,9 @@ dt=1/downsamp_freq
 cc_len=3600
 step=1800
 maxlag=500              #enlarge this number if to do C3
-method='coherence'
-start_date = '2010_12_06'
-end_date   = '2010_12_25'
+method='raw'
+start_date = '2011_03_01'
+end_date   = '2011_03_10'
 inc_days   = 1
 
 #if auto_corr and method=='coherence':
@@ -240,7 +240,7 @@ for ii in range(rank,splits+size-extra,size):
                             
                     fft1 = cc_array[cc_indxS][:]
                     source_std = cc_std[cc_indxS][:]
-                    sou_ind = np.where(source_std < 10)[0]
+                    sou_ind = np.where(source_std < 1000)[0]
                     
                     t0=time.time()
                     #-----------get the smoothed source spectrum for decon later----------
@@ -298,7 +298,7 @@ for ii in range(rank,splits+size-extra,size):
                             receiver_std = cc_std[cc_indxR][:]
 
                             #---------- check the existence of earthquakes ----------
-                            rec_ind = np.where(receiver_std < 10)[0]
+                            rec_ind = np.where(receiver_std < 1000)[0]
 
                             #-----note that Hi-net has a few mi-secs differences to Mesonet in terms starting time-----
                             bb=np.intersect1d(sou_ind,rec_ind)

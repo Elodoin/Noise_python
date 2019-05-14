@@ -451,7 +451,7 @@ def get_distance(lon1,lat1,lon2,lat2):
     dlambda = (lon2 - lon1)*pi/180
     
     a = np.sin(dphi/2)**2+np.cos(phi1)*np.cos(phi2)*np.sin(dlambda/2)**2
-    return 2*R*np.arctan2(np.sqrt(a), np.sqrt(1 - a))/1000
+    return 2*R*np.atan2(np.sqrt(a), np.sqrt(1 - a))/1000
 
 def get_coda_window(dist,vmin,maxlag,dt,wcoda):
     '''
@@ -788,7 +788,7 @@ def whiten_smooth(data,dt,freqmin,freqmax,smooth_N):
         spect[right:high] = np.cos(
             np.linspace(0., np.pi / 2., high - right)) ** 2 * np.exp(
             1j * np.angle(spect[right:high]))
-        spect[high:Nfft//2] *= 0
+        spect[high:Nfft//2+1] *= 0
 
         spect[-(Nfft//2)+1:] = np.flip(np.conj(spect[1:(Nfft//2)]),axis=axis)    
 
