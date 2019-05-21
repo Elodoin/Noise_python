@@ -22,9 +22,9 @@ t0=time.time()
 
 #-------------absolute path of working directory-------------
 rootpath = '/Users/chengxin/Documents/Harvard/Kanto_basin/Mesonet_BW/pre_processing'
-CCFDIR = os.path.join(rootpath,'CCF')
+CCFDIR = os.path.join(rootpath,'CCF_decon')
 FFTDIR = os.path.join(rootpath,'FFT')
-STACKDIR = os.path.join(rootpath,'STACK_raw')
+STACKDIR = os.path.join(rootpath,'STACK_pws')
 
 #------------make correction due to mis-orientation of instruments---------------
 correction = True
@@ -93,6 +93,7 @@ if rank == 0:
     #-------make station pairs based on list--------        
     pairs= noise_module.get_station_pairs(sta)
     ccfs = sorted(glob.glob(os.path.join(CCFDIR,'*.h5')))
+    
     splits = len(pairs)
 
     if not ccfs:
@@ -139,7 +140,9 @@ for ii in range(rank,splits+size-extra,size):
         staR = receiver.split('.')[1]
         netR = receiver.split('.')[0]
 
+        #--used to jump through the station-pairs without data--
         no_data = 1
+
         #-----loop through each day----
         for iday in range(ndays):
             if flag:
@@ -190,7 +193,7 @@ for ii in range(rank,splits+size-extra,size):
                         else:
                             ccomp = data_type[-1]+path[-3]
 
-                        #------put into 1D and 2D matrix----------
+                        #------do substacks here due to many segments------
                         tindx  = enz_components.index(ccomp)
                         findx  = iday*ncomp+tindx
                         corr[findx] += ds.auxiliary_data[data_type][path].data[:]
@@ -274,7 +277,7 @@ for ii in range(rank,splits+size-extra,size):
                                 continue
 
                             #------do average-----
-                            tcorr[jj] = np.mean(corr[indx],axis=0)
+                            tcorr[jj] = noise_module.pws(corr[indx],downsamp_freq)
 
                             if flag:
                                 print('estimate the SNR of component %s for %s_%s in E-N-Z system' % (enz_components[jj],source,receiver))
@@ -365,7 +368,14 @@ for ii in range(rank,splits+size-extra,size):
                         continue
 
                     #------do average-----
-                    tcorr[jj] = np.mean(corr[indx],axis=0)
+                    tcorr[jj] = noise_module.pws(corr[indx],downsamp_freq)
+
+                    if nstack<=1:
+                        tngood = 0
+                        for tii in tindx1[tindx2]:
+                            tngood += ngood[tii,jj]
+                        new_parameters = parameters
+                        new_parameters['ngood'] = tngood
                     
                     #--------evaluate the SNR of the signal at target period range-------
                     #new_parameters = noise_module.get_SNR(tcorr[jj],snr_parameters,parameters)
@@ -378,6 +388,27 @@ for ii in range(rank,splits+size-extra,size):
 
                 #----do rotation-----
                 if do_rotation:
+
+                    if nstack<=1:
+                        #---read azi, baz info---
+                        azi = new_parameters['azi']
+                        baz = new_parameters['baz']
+
+                        #---angles to be corrected----
+                        if correction:
+                            ind = sta_list.index(staS)
+                            acorr = angles[ind]
+                            ind = sta_list.index(staR)
+                            bcorr = angles[ind]
+                            cosa = np.cos((azi+acorr)*pi/180)
+                            sina = np.sin((azi+acorr)*pi/180)
+                            cosb = np.cos((baz+bcorr)*pi/180)
+                            sinb = np.sin((baz+bcorr)*pi/180)
+                        else:
+                            cosa = np.cos(azi*pi/180)
+                            sina = np.sin(azi*pi/180)
+                            cosb = np.cos(baz*pi/180)
+                            sinb = np.sin(baz*pi/180)
 
                     #------9 component tensor rotation 1-by-1------
                     for jj in range(len(rtz_components)):

@@ -902,9 +902,10 @@ def abs_max(arr):
     return (arr.T / np.abs(arr.max(axis=-1))).T
 
 
-def pws(arr,power=2.,sampling_rate=20.,pws_timegate = 5.):
+def pws(arr,sampling_rate,power=2,pws_timegate=5.):
     """
     Performs phase-weighted stack on array of time series. 
+    Modified on the noise function by Tim Climents.
 
     Follows methods of Schimmel and Paulssen, 1997. 
     If s(t) is time series data (seismogram, or cross-correlation),
@@ -930,16 +931,16 @@ def pws(arr,power=2.,sampling_rate=20.,pws_timegate = 5.):
     if arr.ndim == 1:
         return arr
     N,M = arr.shape
-    analytic = arr + 1j * hilbert(arr,axis=1, N=next_fast_len(M))[:,:M]
+    analytic = hilbert(arr,axis=1, N=next_fast_len(M))[:,:M]
     phase = np.angle(analytic)
-    phase_stack = np.mean(np.exp(1j*phase),axis=0)/N
-    phase_stack = np.abs(phase_stack)**2
+    phase_stack = np.mean(np.exp(1j*phase),axis=0)
+    phase_stack = np.abs(phase_stack)**(power)
 
     # smoothing 
-    timegate_samples = int(pws_timegate * sampling_rate)
-    phase_stack = moving_ave(phase_stack,timegate_samples)
+    #timegate_samples = int(pws_timegate * sampling_rate)
+    #phase_stack = moving_ave(phase_stack,timegate_samples)
     weighted = np.multiply(arr,phase_stack)
-    return np.mean(weighted,axis=0)/N
+    return np.mean(weighted,axis=0)
 
 
 def norm(arr):
