@@ -322,7 +322,7 @@ for ista in range (rank,splits+size-extra,size):
                         
                         if prepro:
                             t0=time.time()
-                            source = noise_module.preprocess_raw(source,downsamp_freq,checkt,pre_filt,resp,resp_dir)
+                            source = noise_module.preprocess_raw(source,inv1,downsamp_freq,checkt,pre_filt,resp,resp_dir)
                             if len(source)==0:
                                 continue
                             t1=time.time()
