@@ -43,15 +43,15 @@ tt0=time.time()
 ########################################
 
 #------absolute path parameters-------
-rootpath  = '/Users/chengxin/Documents/Research/Harvard/Kanto'                       # root path for this data processing
+rootpath  = '/Volumes/Chengxin/LV_monitor'                       # root path for this data processing
 FFTDIR    = os.path.join(rootpath,'FFT')                # dir to store FFT data
 CCFDIR    = os.path.join(rootpath,'CCF')                # dir to store CC data
-DATADIR  = os.path.join(rootpath,'noise_data')         # dir where noise data is located
+DATADIR   = os.path.join(rootpath,'RAW_DATA')         # dir where noise data is located
 if (len(glob.glob(DATADIR))==0): 
     raise ValueError('No data file in %s',DATADIR)
 
 #-------some control parameters--------
-input_fmt   = 'SAC'            # string: 'ASDF', 'SAC','mseed' 
+input_fmt   = 'ASDF'            # string: 'ASDF', 'SAC','mseed' 
 to_whiten   = False             # False (no whitening), or running-mean, one-bit normalization
 time_norm   = False             # False (no time normalization), or running-mean, one-bit normalization
 cc_method   = 'deconv'          # select between raw, deconv and coherency
@@ -59,14 +59,15 @@ save_fft    = False             # True to save fft data, or False
 flag        = True              # print intermediate variables and computing time for debugging purpose
 
 # pre-processing parameters 
-cc_len    = 3600                # basic unit of data length for fft (s)
-step      = 1800                # overlapping between each cc_len (s)
+cc_len    = 1200                # basic unit of data length for fft (s)
+step      = 600                 # overlapping between each cc_len (s)
 smooth_N  = 100                 # moving window length for time/freq domain normalization if selected
 
 # cross-correlation parameters
-maxlag         = 500            # lags of cross-correlation to save
+maxlag         = 100            # lags (s) of cross-correlation to save
 substack       = True           # sub-stack daily cross-correlation or not
-substack_len   = 4*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
+substack_len   = 6*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
+sstack_method  = 'linear'       # linear or pws stacking
 smoothspect_N  = 10             # moving window length to smooth spectrum amplitude
 
 # load useful download info if start from ASDF
@@ -100,8 +101,9 @@ MAX_MEM = 4.0
 fc_para={'samp_freq':samp_freq,'dt':dt,'cc_len':cc_len,'step':step,'freqmin':freqmin,'freqmax':freqmax,\
     'to_whiten':to_whiten,'time_norm':time_norm,'cc_method':cc_method,'smooth_N':smooth_N,'data_format':\
     input_fmt,'rootpath':rootpath,'FFTDIR':FFTDIR,'start_date':start_date[0],'end_date':end_date[0],\
-    'inc_hours':inc_hours,'substack':substack,'substack_len':substack_len,'smoothspect_N':smoothspect_N,\
-    'maxlag':maxlag,'max_over_std':max_over_std,'max_kurtosis':max_kurtosis,'MAX_MEM':MAX_MEM}
+    'inc_hours':inc_hours,'substack':substack,'substack_len':substack_len,'sstack_method':sstack_method,\
+    'smoothspect_N':smoothspect_N,'maxlag':maxlag,'max_over_std':max_over_std,'max_kurtosis':max_kurtosis,\
+    'MAX_MEM':MAX_MEM}
 # save fft metadata for future reference
 fc_metadata  = os.path.join(rootpath,'fft_cc_data.txt')       
 

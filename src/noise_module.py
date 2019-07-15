@@ -343,7 +343,7 @@ def preprocess_raw(st,inv,prepro_para,date_info):
         # when starttimes are between sampling points
         fric = st[0].stats.starttime.microsecond%(delta*1E6)
         if fric>1E-4:
-            st[0].data = segment_interpolate(np.float32(st[0].data),float(fric/delta*1E6))
+            st[0].data = segment_interpolate(np.float32(st[0].data),float(fric/(delta*1E6)))
             #--reset the time to remove the discrepancy---
             st[0].stats.starttime-=(fric*1E-6)
 
@@ -408,9 +408,11 @@ def portion_gaps(stream,date_info):
     #loop through all trace to accumulate gaps
     for ii in range(len(stream)-1):
         pgaps += (stream[ii+1].stats.starttime-stream[ii].stats.endtime)*stream[ii].stats.sampling_rate
-    return pgaps/npts
+    if npts>0:
+        return pgaps/npts
+    else: return 1
 
-@jit('float32[:](float32[:],float32)')
+@jit(nopython = True)
 def segment_interpolate(sig1,nfric):
     '''
     a sub-function of clean_daily_segments:
@@ -429,7 +431,7 @@ def segment_interpolate(sig1,nfric):
     for ii in range(npts):
 
         #----deal with edges-----
-        if ii==0 or ii==npts:
+        if ii==0 or ii==npts-1:
             sig2[ii]=sig1[ii]
         else:
             #------interpolate using a hat function------
@@ -829,8 +831,10 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
     maxlag  = D['maxlag']
     method  = D['cc_method']
     cc_len  = D['cc_len'] 
-    substack= D['substack']                                                          
+    substack= D['substack'] 
+    samp_freq     = D['samp_freq']                                                         
     substack_len  = D['substack_len']
+    sstack_method = D['sstack_method']
     smoothspect_N = D['smoothspect_N']
 
     nwin  = fft1_smoothed_abs.shape[0]
@@ -893,7 +897,10 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
                 itime = np.where( (dataS_t[ik] >= tstart) & (dataS_t[ik] < tstart+substack_len) )[0]  
                 if len(ik[itime])==0:tstart+=substack_len;continue
                 
-                crap[:Nfft2] = np.mean(corr[ik[itime],:],axis=0)   # linear average of the correlation 
+                if sstack_method == 'linear':
+                    crap[:Nfft2] = np.mean(corr[ik[itime],:],axis=0)   # linear average of the correlation
+                elif sstack_method == 'pws':
+                    crap[:Nfft2] = pws(corr[ik[itime],:],samp_freq) 
                 crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
                 crap[-(Nfft2)+1:]=np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
                 crap[0]=complex(0,0)
@@ -911,10 +918,13 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
         s_corr = np.zeros(Nfft,dtype=np.float32)
         t_corr = dataS_t[0]
         crap   = np.zeros(Nfft,dtype=np.complex64)
-        crap[:Nfft2] = np.mean(corr[ik,:],axis=0)
+        if sstack_method == 'linear':
+            crap[:Nfft2] = np.mean(corr[ik,:],axis=0)   # linear average of the correlation
+        elif sstack_method == 'pws':
+            crap[:Nfft2] = pws(corr[ik,:],samp_freq) 
         crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2],axis=0)
         crap[-(Nfft2)+1:]=np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
-        n_corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
+        s_corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
 
     # trim the CCFs in [-maxlag maxlag] 
     t = np.arange(-Nfft2+1, Nfft2)*dt
