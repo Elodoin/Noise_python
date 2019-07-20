@@ -42,32 +42,32 @@ A beginning of wonderful NoisePy journey!
 tt0=time.time()
 
 # paths and filenames
-rootpath = '/Volumes/Chengxin/LV_monitor' 
-DATADIR  = os.path.join(rootpath,'RAW_DATA1')      # where to store the downloaded data
+rootpath = '/Users/chengxin/Documents/NoisePy/LA_example' 
+DATADIR  = os.path.join(rootpath,'RAW_DATA')         # where to store the downloaded data
 stalist  = os.path.join(rootpath,'station.lst')      # CSV file for station location info
 
 # download parameters
-client    = Client('NCEDC')                     # client/data center. see https://docs.obspy.org/packages/obspy.clients.fdsn.html for a list
-down_list = True                                # download stations from pre-compiled list
+client    = Client('SCEDC')                      # client/data center. see https://docs.obspy.org/packages/obspy.clients.fdsn.html for a list
+down_list = False                               # download stations from pre-compiled list
 oput_CSV  = False                               # output station.list to a CSV file to be used in later stacking steps
 flag      = False                               # print progress when running the script
-NewFreq   = 20                                  # resampling at X samples per seconds 
+NewFreq   = 10                                  # resampling at X samples per seconds 
 rm_resp   = False                               # False to not remove, True to remove, but 'inv' to remove with inventory
 respdir   = 'none'                              # output response directory (required if rm_resp is true and other than inv)
 freqmin   = 0.05                                # pre filtering frequency bandwidth
-freqmax   = 9
+freqmax   = 3
 out_form  = 'ASDF'                              # choose between ASDF and SAC
 
 # station/network information 
-lamin,lomin,lamax,lomax=-46.5,168,-38,175       # regional box: min lat, min lon, max lat, max lon
-dchan= ['HH*']                                  # channel if down_list=false
-dnet = ["NZ"]                                   # network  
-dsta = ["M?Z"]                                  # station (do either one station or *)
+lamin,lomin,lamax,lomax=33.9,-118.5,34.1,-118   # regional box: min lat, min lon, max lat, max lon
+dchan= ['BH*']                                  # channel if down_list=false
+dnet = ["CI"]                                   # network  
+dsta = ["*"]                                    # station (do either one station or *)
 
 # target time range and interval 
 start_date = ["2008_01_01_0_0_0"]               # start date of download
-end_date   = ["2008_01_03_0_0_0"]               # end date of download
-inc_hours  = 48                                 # length of data for each request (in hour)
+end_date   = ["2008_01_02_0_0_0"]               # end date of download
+inc_hours  = 12                                 # length of data for each request (in hour)
 
 # pre-processing parameters: estimate memory needs
 cc_len    = 3600                                # basic unit of data length for fft (s)
@@ -131,7 +131,9 @@ else:
                 sta.append(sta1.code)
                 net.append(K.code)
                 chan.append(chan1.code)
-                location.append(chan1.location_code)
+                if chan1.location_code:
+                    location.append(chan1.location_code)
+                else: location.append('*')
                 nsta+=1
     prepro_para['nsta'] = nsta
 
@@ -232,7 +234,7 @@ for ick in range (rank,splits,size):
                 sac.write(ff,byteorder='big')
 
         if flag:
-            print(ds,new_tags);print('downloading data %6.2f s; pre-process %6.2f s' % ((t1-t0),(t2-t1)))
+            print(new_tags);print('downloading data %6.2f s; pre-process %6.2f s' % ((t1-t0),(t2-t1)))
 
 tt1=time.time()
 print('downloading step takes %6.2f s' %(tt1-tt0))
