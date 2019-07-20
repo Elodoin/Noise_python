@@ -9,6 +9,7 @@ import noise_module
 from mpi4py import MPI
 from obspy import UTCDateTime
 from obspy.clients.fdsn import Client
+from obspy.io.sac.sactrace import SACTrace
 
 if not sys.warnoptions:
     import warnings
@@ -42,28 +43,36 @@ tt0=time.time()
 
 # paths and filenames
 rootpath = '/Volumes/Chengxin/LV_monitor' 
-DATADIR  = os.path.join(rootpath,'RAW_DATA')      # where to store the downloaded data
+DATADIR  = os.path.join(rootpath,'RAW_DATA1')      # where to store the downloaded data
 stalist  = os.path.join(rootpath,'station.lst')      # CSV file for station location info
 
 # download parameters
 client    = Client('NCEDC')                     # client/data center. see https://docs.obspy.org/packages/obspy.clients.fdsn.html for a list
-down_list = True                               # download stations from pre-compiled list
-oput_CSV  = False                                # output station.list to a CSV file to be used in later stacking steps
-flag      = False                                # print progress when running the script
+down_list = True                                # download stations from pre-compiled list
+oput_CSV  = False                               # output station.list to a CSV file to be used in later stacking steps
+flag      = False                               # print progress when running the script
 NewFreq   = 20                                  # resampling at X samples per seconds 
 rm_resp   = False                               # False to not remove, True to remove, but 'inv' to remove with inventory
 respdir   = 'none'                              # output response directory (required if rm_resp is true and other than inv)
 freqmin   = 0.05                                # pre filtering frequency bandwidth
 freqmax   = 9
+out_form  = 'ASDF'                              # choose between ASDF and SAC
 
-# station information 
+# station/network information 
 lamin,lomin,lamax,lomax=-46.5,168,-38,175       # regional box: min lat, min lon, max lat, max lon
 dchan= ['HH*']                                  # channel if down_list=false
 dnet = ["NZ"]                                   # network  
 dsta = ["M?Z"]                                  # station (do either one station or *)
+
+# target time range and interval 
 start_date = ["2008_01_01_0_0_0"]               # start date of download
-end_date   = ["2010_01_01_0_0_0"]               # end date of download
+end_date   = ["2008_01_03_0_0_0"]               # end date of download
 inc_hours  = 48                                 # length of data for each request (in hour)
+
+# pre-processing parameters: estimate memory needs
+cc_len    = 3600                                # basic unit of data length for fft (s)
+step      = 1800                                # overlapping between each cc_len (s)
+MAX_MEM   = 3.0                                 # maximum memory allowed per core in GB
 
 # time tags
 starttime = obspy.UTCDateTime(start_date[0])       
@@ -111,9 +120,9 @@ else:
         if flag:print(inv1)
     except Exception as e:
         print('Abort! '+str(e))
-        exit()
+        sys.exit()
 
-    # calculate the total number of channels to download
+    # calculate the total number of channels for download
     sta=[];net=[];chan=[];location=[]
     nsta=0
     for K in inv:
@@ -125,6 +134,15 @@ else:
                 location.append(chan1.location_code)
                 nsta+=1
     prepro_para['nsta'] = nsta
+
+# crude estimation on memory needs (assume float32)
+nsec_chunck = inc_hours/24*86400
+nseg_chunck = int(np.floor((nsec_chunck-cc_len)/step))+1
+npts_chunck = int(nseg_chunck*cc_len*NewFreq)
+memory_size = nsta*npts_chunck*4/1024**3
+if memory_size > MAX_MEM:
+    raise ValueError('Require %s G memory for cc (%s GB provided)! Please consider \
+        reduce inc_hours as it cannot load %s h of data all at once!' % (memory_size,MAX_MEM,inc_hours))
 
 
 ########################################################
@@ -164,58 +182,57 @@ for ick in range (rank,splits,size):
     s2=obspy.UTCDateTime(all_chunck[ick+1]) 
     date_info = {'starttime':s1,'endtime':s2} 
     
-    # filename of the ASDF file
-    ff=os.path.join(DATADIR,all_chunck[ick]+'T'+all_chunck[ick+1]+'.h5')
-    if not os.path.isfile(ff):
-        with pyasdf.ASDFDataSet(ff,mpi=False,compression="gzip-3",mode='w') as ds:
+    # loop through each channel
+    for ista in range(nsta):
 
-            # loop through each channel
-            for ista in range(nsta):
+        # select from existing inventory database
+        if down_list:
+            print('request station:',net[ista],sta[ista],location[ista],s1,s2)
+            try:
+                sta_inv = client.get_stations(network=net[ista],station=sta[ista],\
+                    location=location[ista],starttime=s1,endtime=s2,level="response")
+            except Exception as e:
+                print('request station error:',e,'for',sta[ista]);continue
+        else:
+            sta_inv = inv1.select(network=net[ista],station=sta[ista],location=location[ista]) 
+            if not sta_inv:
+                continue 
 
-                # select from existing inventory database
-                if down_list:
-                    print('request station:',net[ista],sta[ista],location[ista],s1,s2)
-                    try:
-                        sta_inv = client.get_stations(network=net[ista],station=sta[ista],\
-                            location=location[ista],starttime=s1,endtime=s2,level="response")
-                    except Exception as e:
-                        print('request station error:',e,'for',sta[ista]);continue
-
-                    #if sta_inv[0][0][0].location_code:
-                    #    location[ista] = sta_inv[0][0][0].location_code
-                else:
-                    sta_inv = inv1.select(network=net[ista],station=sta[ista],location=location[ista]) 
-                    if not sta_inv:
-                        continue 
-
+        if out_form == 'ASDF':
+            ff=os.path.join(DATADIR,all_chunck[ick]+'T'+all_chunck[ick+1]+'.h5')
+            with pyasdf.ASDFDataSet(ff,mpi=False,compression="gzip-3") as ds:
                 # add the inventory for all components + all time of this tation         
                 try:ds.add_stationxml(sta_inv) 
                 except Exception: pass   
+        try:
+            # get data
+            t0=time.time()
+            tr = client.get_waveforms(network=net[ista],station=sta[ista],\
+                channel=chan[ista],location=location[ista],starttime=s1,endtime=s2)
+            t1=time.time()
+        except Exception as e:
+            print('requesting data error',e,'for',sta[ista]);continue
+            
+        # preprocess to clean data  
+        tr = noise_module.preprocess_raw(tr,sta_inv,prepro_para,date_info)
+        t2 = time.time()
 
-                try:
-                    # get data
-                    t0=time.time()
-                    print('request waveform:',net[ista],sta[ista],location[ista],s1,s2)
-                    tr = client.get_waveforms(network=net[ista],station=sta[ista],\
-                        channel=chan[ista],location=location[ista],starttime=s1,endtime=s2)
-                    t1=time.time()
-                except Exception as e:
-                    print('requesting data error',e,'for',sta[ista]);continue
-                    
-                # preprocess to clean data  
-                tr = noise_module.preprocess_raw(tr,sta_inv,prepro_para,date_info)
-                t2 = time.time()
-
-                if len(tr):
-                    if location[ista] == '*':
-                        tlocation = str('00')
-                    else:
-                        tlocation = location[ista]
+        if len(tr):
+            if out_form == 'ASDF':
+                with pyasdf.ASDFDataSet(ff,mpi=False,compression="gzip-3") as ds:
+                    if location[ista] == '*':tlocation = str('00')
+                    else:tlocation = location[ista]            
                     new_tags = '{0:s}_{1:s}'.format(chan[ista].lower(),tlocation.lower())
                     ds.add_waveforms(tr,tag=new_tags)
 
-                if flag:
-                    print(ds,new_tags);print('downloading data %6.2f s; pre-process %6.2f s' % ((t1-t0),(t2-t1)))
+            elif out_form == 'SAC':
+                ff=os.path.join(DATADIR,net[ista]+sta[ista]+'.'+all_chunck[ick]+'T'+all_chunck[ick+1]+'.SAC')
+                sac = SACTrace(nzyear=s1.year,nzjday=s1.julday,nzhour=s1.hour,nzmin=s1.minute,nzsec=s1.second,nzmsec=0,b=0,\
+                    delta=1/tr[0].stats.sampling_rate,stla=sta_inv[0][0].latitude,stlo=sta_inv[0][0].longitude,data=tr[0].data)
+                sac.write(ff,byteorder='big')
+
+        if flag:
+            print(ds,new_tags);print('downloading data %6.2f s; pre-process %6.2f s' % ((t1-t0),(t2-t1)))
 
 tt1=time.time()
 print('downloading step takes %6.2f s' %(tt1-tt0))

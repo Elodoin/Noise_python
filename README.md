@@ -5,16 +5,26 @@ NoisePy is a Python package designed for fast and easy ambient noise cross-corre
 
  
 # Installation
-This package contains 3 main scripts with 1 module named as noise_module. To install
-it, simple go to src directory and run install.py. this will check whether the required
-modules are installed, and do so if not. You can also find all dependencies in the 
-requirement.txt file. 
+This package contains 3 main python scripts with 1 dependent module named as noise_module. To install
+it, go to src directory and run install.py, which is simply checking whether the dependent modules are installed in the local machine or not. Due to the availablility of multiple version of dependent packages,
+we provide a list of module information below working well on macOS Mojave (10.14.5) for your reference. 
 
 # Functionality
-* download continous noise data using Obspy modules in ASDF formate
-* perform fast and easy cross-correlation for data downloaded using this package as 
+* download continous noise data using Obspy modules and save data in [ASDF](https://asdf-definition.readthedocs.io/en/latest/) format
+* perform fast and easy cross-correlation for downloaded seismic data using this package as 
 well as those stored on local machine in SAC/miniSEED format
 * do stacking (sub-stacking) of the cross-correlation functions for monitoring purpose
 
 # Short tutorial
+1. Downloading seismic noise data
+We have two ways. 
+1a. aim at noise data in a region without prior station info
+
+1b. aim at noise data listed in a station list
+
+2. Perform cross correlations
+Several options for the cross correlation methods. We choose 'decon' as an example here.
+
+3. Do stacking
+
 

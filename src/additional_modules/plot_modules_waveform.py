@@ -7,24 +7,23 @@ import matplotlib.pyplot as plt
 from obspy.signal.filter import bandpass
 
 '''
-the main purpose of this module is to assemble some simple functions
-to plot different waveform types from intermediate files outputed by 
-the Noise_Python package
+the main purpose of this module is to assemble some useful plotting functions
+to display intermediate waveforms outputed by the NoisePy package
 
-Chengxin Jiang (Mar.04.2019)
+Author: Chengxin Jiang (Mar.04.2019)
 
-it includes:
-1). plot_spectrum(sfile,iday,icomp) to plot the FFT files for each station
-2). plot_moveout(sfile,freqmin,freqmax,net1=None,sta1=None,comp1=None) to plot
+Specifically, this plotting module includes functions to:
+1) plot_spectrum(sfile,iday,icomp) to plot the FFT files for each station
+2) plot_moveout(sfile,freqmin,freqmax,net1=None,sta1=None,comp1=None) to plot
     the move-out of the ccfs for each source
-3). plot_cc_2lags(sfile,net1,sta1,comp1,net2,sta2,comp2) to plot both lags
+3) plot_cc_2lags(sfile,net1,sta1,comp1,net2,sta2,comp2) to plot both lags
     of the ccfs to compare the symmetry
-4). plot_cc_withtime(ccfdir,stackdir,freqmin,freqmax,net1,sta1,comp1,net2=None,sta2=None,comp2=None)
+4) plot_cc_withtime(ccfdir,stackdir,freqmin,freqmax,net1,sta1,comp1,net2=None,sta2=None,comp2=None)
     to plot the ccfs of one station-pair at different days
-5). plot_ZH_pmotion(sfile,freqmin,freqmax,net1,sta1,net2=None,sta2=None) to show the R-Z cross components
+5) plot_ZH_pmotion(sfile,freqmin,freqmax,net1,sta1,net2=None,sta2=None) to show the R-Z cross components
     as well as the particle motion to identify body-wave components
-6). plot_multi_freq
-7). compare_c2_c3_waveforms(c2file,c3file,maxlag,c2_maxlag,dt)
+6) plot_multi_freq
+7) compare_c2_c3_waveforms(c2file,c3file,maxlag,c2_maxlag,dt)
 '''
 
 def plot_spectrum(sfile,iday,icomp):

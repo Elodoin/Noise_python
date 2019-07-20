@@ -757,7 +757,7 @@ def optimized_cc_parameters(cc_para,coor,tcorr,ncorr):
 
     dist,azi,baz = obspy.geodetics.base.gps2dist_azimuth(latS,lonS,latR,lonR)
     parameters = {'dt':dt,
-        'lag':int(maxlag),
+        'maxlag':int(maxlag),
         'dist':np.float32(dist/1000),
         'azi':np.float32(azi),
         'baz':np.float32(baz),
@@ -834,7 +834,6 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
     substack= D['substack'] 
     samp_freq     = D['samp_freq']                                                         
     substack_len  = D['substack_len']
-    sstack_method = D['sstack_method']
     smoothspect_N = D['smoothspect_N']
 
     nwin  = fft1_smoothed_abs.shape[0]
@@ -849,44 +848,37 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
         corr /= temp
     corr  = corr.reshape(nwin,Nfft2)
 
-    #--------------- remove outliers in frequency domain -------------------
-    # [reduce the number of IFFT by pre-selecting good windows before substack]
-    freq = scipy.fftpack.fftfreq(Nfft, d=dt)[:Nfft2]
-    i1 = np.where( (freq>=freqmin) & (freq <= freqmax))[0]
-
-    # this creates the residuals between each window and their median
-    med = np.log10(np.median(corr[:,i1],axis=0))
-    r   = np.log10(corr[:,i1]) - med
-    ik  = np.zeros(nwin,dtype=np.int)
-    # find time window of good data
-    for i in range(nwin):
-        if np.any( (r[i,:]>=med-10) & (r[i,:]<=med+10) ):ik[i]=i
-    ik1 = np.nonzero(ik)
-    ik=ik[ik1]
-
+    # do substacking
     if substack:
         if substack_len == cc_len:
             # choose to keep all fft data for a day
             s_corr = np.zeros(shape=(nwin,Nfft),dtype=np.float32)   # stacked correlation
+            ampmax = np.zeros(nwin,dtype=np.float32)
             n_corr = np.zeros(nwin,dtype=np.int16)                  # number of correlations for each substack
             t_corr = dataS_t[0]                                     # timestamp
             crap   = np.zeros(Nfft,dtype=np.complex64)
-            for i in range(len(ik)): 
-                n_corr[ik[i]]= 1           
-                crap[:Nfft2] = corr[ik[i],:]
+            for iwin in range(nwin): 
+                n_corr[iwin] = 1           
+                crap[:Nfft2] = corr[iwin,:]
                 crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
                 crap[-(Nfft2)+1:] = np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
-                crap[0]=complex(0,0)
-                s_corr[i,:] = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
-            tindx = np.where(n_corr>0)[0]
-            s_corr = s_corr[tindx]
+                crap[0] = complex(0,0)
+                s_corr[iwin,:] = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
+
+            # remove abnormal data
+            ampmax = np.max(s_corr,axis=0)
+            tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
+            s_corr = s_corr[tindx,:]
+            t_corr = t_corr[tindx]
+            n_corr = n_corr[tindx]
         
         else:     
             # get time information
-            Ttotal = dataS_t[-1]-dataS_t[0]             # total duration of what we have now
+            Ttotal = dataS_t[-1]-dataS_t[0]+cc_len             # total duration of what we have now
             tstart = dataS_t[0]
 
-            nstack = int(np.round(Ttotal/substack_len))
+            nstack = int(np.floor(Ttotal/substack_len))
+            ampmax = np.zeros(nstack,dtype=np.float32)
             s_corr = np.zeros(shape=(nstack,Nfft),dtype=np.float32)
             n_corr = np.zeros(nstack,dtype=np.int)
             t_corr = np.zeros(nstack,dtype=np.float)
@@ -894,34 +886,33 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
 
             for istack in range(nstack):                                                                   
                 # find the indexes of all of the windows that start or end within 
-                itime = np.where( (dataS_t[ik] >= tstart) & (dataS_t[ik] < tstart+substack_len) )[0]  
-                if len(ik[itime])==0:tstart+=substack_len;continue
+                itime = np.where( (dataS_t >= tstart) & (dataS_t < tstart+substack_len) )[0]  
+                if len(itime)==0:tstart+=substack_len;continue
                 
-                if sstack_method == 'linear':
-                    crap[:Nfft2] = np.mean(corr[ik[itime],:],axis=0)   # linear average of the correlation
-                elif sstack_method == 'pws':
-                    crap[:Nfft2] = pws(corr[ik[itime],:],samp_freq) 
+                crap[:Nfft2] = np.mean(corr[itime,:],axis=0)   # linear average of the correlation
                 crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2])   # remove the mean in freq domain (spike at t=0)
-                crap[-(Nfft2)+1:]=np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
+                crap[-(Nfft2)+1:]= np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
                 crap[0]=complex(0,0)
                 s_corr[istack,:] = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
-                n_corr[istack] = len(ik[itime])           # number of windows stacks
+                n_corr[istack] = len(itime)           # number of windows stacks
                 t_corr[istack] = tstart                   # save the time stamps
                 tstart += substack_len
                 #print('correlation done and stacked at time %s' % str(t_corr[istack]))
-            tindx = np.where(n_corr>0)
-            s_corr = s_corr[tindx]
+
+            # remove abnormal data
+            ampmax = np.max(s_corr,axis=1)
+            tindx  = np.where( (ampmax<20*np.median(ampmax)) & (ampmax>0))[0]
+            s_corr = s_corr[tindx,:]
+            t_corr = t_corr[tindx]
+            n_corr = n_corr[tindx]
 
     else:
         # average daily cross correlation functions
-        n_corr = len(ik)
+        n_corr = nwin
         s_corr = np.zeros(Nfft,dtype=np.float32)
         t_corr = dataS_t[0]
         crap   = np.zeros(Nfft,dtype=np.complex64)
-        if sstack_method == 'linear':
-            crap[:Nfft2] = np.mean(corr[ik,:],axis=0)   # linear average of the correlation
-        elif sstack_method == 'pws':
-            crap[:Nfft2] = pws(corr[ik,:],samp_freq) 
+        crap[:Nfft2] = np.mean(corr[nwin,:],axis=0)   # linear average of the correlation
         crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2],axis=0)
         crap[-(Nfft2)+1:]=np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
         s_corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))
@@ -974,7 +965,7 @@ def load_pfiles(pfiles):
         paths_all = list(set(paths_all+tpath))
     return paths_all
 
-def do_stacking(cc_array,cc_time,f_substack_len,stack_para):
+def do_stacking(cc_array,cc_time,cc_ngood,f_substack_len,stack_para):
     '''
     stacks the cross correlation data according to the interval of substack_len
 
@@ -989,27 +980,39 @@ def do_stacking(cc_array,cc_time,f_substack_len,stack_para):
     # do substacking and output them
     samp_freq = stack_para['samp_freq']
     smethod   = stack_para['stack_method']
+    cc_len    = stack_para['cc_len']
     npts      = cc_array.shape[1]
+
+    if cc_time[-1]<=cc_time[0]:
+        s_corr=[];t_corr=[];n_corr=[]
+        return s_corr,t_corr,n_corr
 
     if f_substack_len:
         # get time information
-        Ttotal = cc_time[-1]-cc_time[0]             # total duration of what we have now
+        Ttotal = cc_time[-1]-cc_time[0]+cc_len             # total duration of what we have now
         tstart = cc_time[0]
 
-        nstack = int(np.round(Ttotal/f_substack_len))
+        nstack = int(np.floor(Ttotal/f_substack_len))
         s_corr = np.zeros(shape=(nstack,npts),dtype=np.float32)
         n_corr = np.zeros(nstack,dtype=np.int)
-        t_corr = np.zeros(nstack,dtype=np.float)
-        crap   = np.zeros(npts,dtype=np.float32)                                              
+        t_corr = np.zeros(nstack,dtype=np.float) 
+
+        # remove abnormal data
+        ampmax = np.zeros(cc_array.shape[0],dtype=np.float32)
+        ampmax = np.max(cc_array,axis=1)
+        indx = np.where((ampmax<20*np.median(ampmax)) & (ampmax>0) )[0]                                          
 
         for istack in range(nstack):                                                                   
             # find the indexes of all of the windows that start or end within 
-            itime  = np.where( (cc_time >= tstart) & (cc_time < tstart+f_substack_len) )[0]  
+            itime  = np.where( (cc_time[indx] >= tstart) & (cc_time[indx] < tstart+f_substack_len) )[0]  
+            if not len(itime):tstart+=f_substack_len;continue
+            ik = indx[itime]
+                
             if smethod == 'linear':
-                s_corr[istack] = np.mean(cc_array[itime,:],axis=0)    # linear average of the correlation
+                s_corr[istack] = np.mean(cc_array[ik,:],axis=0)    # linear average of the correlation
             elif smethod == 'pws':
-                s_corr[istack] = pws(cc_array[itime,:],samp_freq) 
-            n_corr[istack] = len(itime)           # number of windows stacks
+                s_corr[istack] = pws(cc_array[ik,:],samp_freq) 
+            n_corr[istack] = np.sum(cc_ngood[ik])          # number of windows stacks
             t_corr[istack] = tstart               # save the time stamps
             tstart += f_substack_len
             #print('correlation done and stacked at time %s' % str(t_corr[istack]))
@@ -1019,10 +1022,17 @@ def do_stacking(cc_array,cc_time,f_substack_len,stack_para):
         s_corr = np.zeros(npts,dtype=np.float32)
         n_corr = 1
         t_corr = cc_time[0]
+        
+        # remove abnormal data
+        ampmax = np.zeros(cc_array.shape[0],dtype=np.float32)
+        ampmax = np.max(cc_array,axis=1)
+        indx = np.where((ampmax<20*np.median(ampmax)) & (ampmax>0) )[0]
+
         if smethod == 'linear':
-            s_corr = np.mean(cc_array[:],axis=0)
+            s_corr = np.mean(cc_array[indx,:],axis=0)
         elif smethod == 'pws':
-            s_corr = pws(cc_array[:],samp_freq) 
+            s_corr = pws(cc_array[indx,:],samp_freq) 
+        n_corr = np.sum(cc_ngood[indx])
     
     return s_corr,t_corr,n_corr
 

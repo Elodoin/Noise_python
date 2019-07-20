@@ -9,6 +9,7 @@ import os, glob
 import numpy as np
 import pandas as pd
 import noise_module
+import plot_modules
 from mpi4py import MPI
 from scipy.fftpack.helper import next_fast_len
 
@@ -43,10 +44,10 @@ tt0=time.time()
 ########################################
 
 #------absolute path parameters-------
-rootpath  = '/Volumes/Chengxin/LV_monitor'                       # root path for this data processing
+rootpath  = '/Volumes/Chengxin/LV_monitor'              # root path for this data processing
 FFTDIR    = os.path.join(rootpath,'FFT')                # dir to store FFT data
 CCFDIR    = os.path.join(rootpath,'CCF')                # dir to store CC data
-DATADIR   = os.path.join(rootpath,'RAW_DATA')         # dir where noise data is located
+DATADIR   = os.path.join(rootpath,'RAW_DATA')           # dir where noise data is located
 if (len(glob.glob(DATADIR))==0): 
     raise ValueError('No data file in %s',DATADIR)
 
@@ -56,7 +57,7 @@ to_whiten   = False             # False (no whitening), or running-mean, one-bit
 time_norm   = False             # False (no time normalization), or running-mean, one-bit normalization
 cc_method   = 'deconv'          # select between raw, deconv and coherency
 save_fft    = False             # True to save fft data, or False
-flag        = True              # print intermediate variables and computing time for debugging purpose
+flag        = False             # print intermediate variables and computing time for debugging purpose
 
 # pre-processing parameters 
 cc_len    = 1200                # basic unit of data length for fft (s)
@@ -66,8 +67,7 @@ smooth_N  = 100                 # moving window length for time/freq domain norm
 # cross-correlation parameters
 maxlag         = 100            # lags (s) of cross-correlation to save
 substack       = True           # sub-stack daily cross-correlation or not
-substack_len   = 6*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
-sstack_method  = 'linear'       # linear or pws stacking
+substack_len   = 3*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
 smoothspect_N  = 10             # moving window length to smooth spectrum amplitude
 
 # load useful download info if start from ASDF
@@ -101,9 +101,8 @@ MAX_MEM = 4.0
 fc_para={'samp_freq':samp_freq,'dt':dt,'cc_len':cc_len,'step':step,'freqmin':freqmin,'freqmax':freqmax,\
     'to_whiten':to_whiten,'time_norm':time_norm,'cc_method':cc_method,'smooth_N':smooth_N,'data_format':\
     input_fmt,'rootpath':rootpath,'FFTDIR':FFTDIR,'start_date':start_date[0],'end_date':end_date[0],\
-    'inc_hours':inc_hours,'substack':substack,'substack_len':substack_len,'sstack_method':sstack_method,\
-    'smoothspect_N':smoothspect_N,'maxlag':maxlag,'max_over_std':max_over_std,'max_kurtosis':max_kurtosis,\
-    'MAX_MEM':MAX_MEM}
+    'inc_hours':inc_hours,'substack':substack,'substack_len':substack_len,'smoothspect_N':smoothspect_N,\
+    'maxlag':maxlag,'max_over_std':max_over_std,'max_kurtosis':max_kurtosis,'MAX_MEM':MAX_MEM}
 # save fft metadata for future reference
 fc_metadata  = os.path.join(rootpath,'fft_cc_data.txt')       
 
@@ -261,8 +260,7 @@ for ick in range (rank,splits+size-extra,size):
         if input_fmt == 'ASDF': del ds
 
         # check whether array size is enough
-        if iii!=nsta:
-            print('it seems some stations miss data in download step, but it is OKAY!')
+        if iii!=nsta:print('some stations miss data during download, but it is OKAY!')
 
         # make cross-correlations 
         path_array=[]
@@ -314,9 +312,13 @@ for ick in range (rank,splits+size-extra,size):
                     crap[:] = corr[:]
                     ccf_ds.add_auxiliary_data(data=crap, data_type='CCF', path=path, parameters=parameters)
                 t4=time.time()
+
                 # keep a track of the path information used for later stacking 
                 if path not in path_array:
                     path_array.append(path)
+
+                # display the cc functions by each-station
+                #plot_modules.plot_substack_cc(cc_h5,freqmin,freqmax,60,True)
 
                 t5=time.time()
                 if flag:
@@ -327,7 +329,7 @@ for ick in range (rank,splits+size-extra,size):
 
         # save the ASDF path info for later stacking use
         path_para = {'paths':path_array}
-        pfile = os.path.join(rootpath,'CCF/paths_'+str(rank)+'.lst')
+        pfile = os.path.join(CCFDIR,'paths_'+str(rank)+'.lst')
         fout  = open(pfile,'w')
         fout.write(str(path_para));fout.close()
     
