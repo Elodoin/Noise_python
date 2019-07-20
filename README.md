@@ -9,15 +9,15 @@ This package contains 3 main python scripts with 1 dependent module named as noi
 it, go to src directory and run install.py, which is simply checking whether the requried library are installed in the local machine or not. Due to the availablility of multiple version of dependent library,
 we provide a list of library below that works well on macOS Mojave (10.14.5) for your reference. 
 
-  **library**   **version**
-    python  -> 3.7.3
-    [numpy](https://numpy.org/)  -> 1.16.3  
-    [scipy](https://www.scipy.org/)  -> 1.3.0
-    [pandas](https://pandas.pydata.org/)  -> 0.24.2
-    [obspy](https://github.com/obspy/obspy/wiki)  -> 1.1.1
-    [pyasdf](http://seismicdata.github.io/pyasdf/)  -> 0.4.0
-    [numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/)  -> 0.44.1
-    [mpi4py](https://mpi4py.readthedocs.io/en/stable/)  -> 3.0.1
+  **library**   **version**\
+  python  -> 3.7.3\
+  [numpy](https://numpy.org/)  -> 1.16.3\  
+  [scipy](https://www.scipy.org/)  -> 1.3.0\
+  [pandas](https://pandas.pydata.org/)  -> 0.24.2\
+  [obspy](https://github.com/obspy/obspy/wiki)  -> 1.1.1\
+  [pyasdf](http://seismicdata.github.io/pyasdf/)  -> 0.4.0\
+  [numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/)  -> 0.44.1\
+  [mpi4py](https://mpi4py.readthedocs.io/en/stable/)  -> 3.0.1\
 
 
 # Functionality
