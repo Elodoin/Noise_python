@@ -1,6 +1,5 @@
 import os
 import glob
-import copy
 import scipy
 import time
 import pyasdf

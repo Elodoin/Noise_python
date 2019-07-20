@@ -9,7 +9,6 @@ import os, glob
 import numpy as np
 import pandas as pd
 import noise_module
-import plot_modules
 from mpi4py import MPI
 from scipy.fftpack.helper import next_fast_len
 
