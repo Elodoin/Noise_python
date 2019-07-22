@@ -4,30 +4,26 @@ NoisePy is a Python package designed for fast and easy ambient noise cross-corre
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://github.come/mdenolle/NoisPy/latest) [![Build Status](https://travis-ci.org/mdenolle/Noise.jl.svg?branch=master)](https://travis-ci.org/mdenolle/NoisePy) [![Coverage Status](https://coveralls.io/repos/github/mdenolle/Noise.jl/badge.svg?branch=master)](https://coveralls.io/github/mdenolle/NoisePy?branch=master)
 
 <img src="/docs/src/logo.png" width="800" height="400">
-
----------
  
 # Installation
-This package contains 3 main python scripts with 1 dependent module named as `noise_module`. To install
-it, go to `src` directory and run `install.py`, which is simply checking whether the requried library are installed in the local machine or not. Due to the availablility of multiple version of dependent library,
-we provide a list of library below that works well on `macOS Mojave (10.14.5)` for your reference. 
+This package contains 3 main python scripts with 1 dependent module named as `noise_module`. All the depended library are listed below, and we recommend to install them using [conda](https://docs.conda.io/en/latest/) or [pip](https://pypi.org/project/pip/). Due to the availablility of multiple version of dependent library, we did not illusively tested their performance on this package. But a list of library with version information that works on `macOS Mojave (10.14.5)` is provoded for your reference. 
 
   **library**    **version**\
-  [python](https://www.python.org/)  -> 3.7.3\
-  [numpy](https://numpy.org/)  -> 1.16.3\
-  [scipy](https://www.scipy.org/)    -> 1.3.0\
-  [pandas](https://pandas.pydata.org/)  -> 0.24.2\
-  [obspy](https://github.com/obspy/obspy/wiki)   -> 1.1.1\
-  [pyasdf](http://seismicdata.github.io/pyasdf/)  -> 0.4.0\
-  [numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/)  -> 0.44.1\
-  [mpi4py](https://mpi4py.readthedocs.io/en/stable/)  -> 3.0.1
+  [numpy](https://numpy.org/) -> 1.16.3\
+  [scipy](https://www.scipy.org/) -> 1.3.0\
+  [numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/) -> 0.44.1\
+  [obspy](https://github.com/obspy/obspy/wiki) -> 1.1.1\
+  [pandas](https://pandas.pydata.org/) -> 0.24.2\
+  [pyasdf](http://seismicdata.github.io/pyasdf/) -> 0.4.0\
+  [python](https://www.python.org/) -> 3.7.3\
+  [mpi4py](https://mpi4py.readthedocs.io/en/stable/) -> 3.0.1
 
 
 # Functionality
-* download continous noise data using Obspy modules and save data in [ASDF](https://asdf-definition.readthedocs.io/en/latest/) format
-* perform fast and easy cross-correlation for downloaded seismic data using this package as 
+* download continous noise data based on obspy's [mass download](https://docs.obspy.org/packages/autogen/obspy.clients.fdsn.mass_downloader.html) module and the data is saved as [ASDF](https://asdf-definition.readthedocs.io/en/latest/) format in default
+* perform fast and easy cross-correlation for downloaded seismic data in ASDF format as 
 well as those stored on local machine as SAC/miniSEED format
-* do stacking (sub-stacking) of the cross-correlation functions 
+* do sub-stacking and all stacking of the cross-correlation functions 
 * provide several options to measure dv/v on the resulted cross-correlation functions
 
 # Short tutorial
