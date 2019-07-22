@@ -8,16 +8,16 @@ NoisePy is a Python package designed for fast and easy ambient noise cross-corre
 # Installation
 This package contains 3 main python scripts with 1 dependent module named as `noise_module`. All the depended library are listed below, and we recommend to install them using [conda](https://docs.conda.io/en/latest/) or [pip](https://pypi.org/project/pip/). Due to the availablility of multiple version of dependent library, we did not exclusively tested their performance. But the version information provided below works well on `macOS Mojave (10.14.5)`. 
 
-|  Tables  |  **library**  |  **version**  |\
-|:------:|:----------:|:----------:|
-|[numpy](https://numpy.org/)|  1.16.3|\
-|[scipy](https://www.scipy.org/) | 1.3.0|\
-|[numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/) | 0.44.1|\
-|[obspy](https://github.com/obspy/obspy/wiki) |1.1.1|\
-|[pandas](https://pandas.pydata.org/) | 0.24.2|\
-|[pyasdf](http://seismicdata.github.io/pyasdf/) |0.4.0|\
-|[python](https://www.python.org/) |3.7.3|\
-|[mpi4py](https://mpi4py.readthedocs.io/en/stable/) | 3.0.1|
+    |  **library**  |  **version**  |\
+:------:|:----------:|:----------:|\
+[numpy](https://numpy.org/)|  1.16.3|\
+[scipy](https://www.scipy.org/) | 1.3.0|\
+[numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/) | 0.44.1|\
+[obspy](https://github.com/obspy/obspy/wiki) |1.1.1|\
+[pandas](https://pandas.pydata.org/) | 0.24.2|\
+[pyasdf](http://seismicdata.github.io/pyasdf/) |0.4.0|\
+[python](https://www.python.org/) |3.7.3|\
+[mpi4py](https://mpi4py.readthedocs.io/en/stable/) | 3.0.1|
 
 
 # Functionality
