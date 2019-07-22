@@ -3,7 +3,7 @@ NoisePy is a Python package designed for fast and easy ambient noise cross-corre
 
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://github.come/mdenolle/NoisPy/latest) [![Build Status](https://travis-ci.org/mdenolle/Noise.jl.svg?branch=master)](https://travis-ci.org/mdenolle/NoisePy) [![Coverage Status](https://coveralls.io/repos/github/mdenolle/Noise.jl/badge.svg?branch=master)](https://coveralls.io/github/mdenolle/NoisePy?branch=master)
 
-![noisepy logo](/docs/src/logo.png)
+![noisepy logo](/docs/src/logo.png =200*50)
 
 ---------
  
@@ -31,7 +31,7 @@ well as those stored on local machine as SAC/miniSEED format
 * provide several options to measure dv/v on the resulted cross-correlation functions
 
 # Short tutorial
-1. Downloading seismic noise data (`S0_download_MPI.py`)\
+1. Downloading seismic noise data (`S0_download_MPI.py`)
 
     1a. interested in noise data from a region without prior station info\
     In this example, we aim to download all broadband CI stations around LA operated during 1/Jan/2008, and store the data as two chuncks, each with 12 h long continous recordings (set `inc_hours=12`). In the script, we also set `down_list` to be `False` since no station info is provided, and fill the region info at Lxx. The option of `flag` should be set to `True` if intermediate outputs/operational time is needed during the download process. To run the code on a single core, go to your terminal setup with a python environment with required library as suggested above and run `python S0_download_ASDF_MPI.py`  
