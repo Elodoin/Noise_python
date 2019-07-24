@@ -104,6 +104,7 @@ if down_list:
         location = list(locs.iloc[:]['location'])
     except Exception as e:
         location = ['*']*nsta
+    prepro_para['nsta'] = nsta
 
 else:
 

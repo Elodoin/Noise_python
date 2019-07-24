@@ -29,7 +29,7 @@ tt0=time.time()
 ########################################
 
 # absolute path parameters
-rootpath  = '/Volumes/Chengxin/LV_monitor'                  # root path for this data processing
+rootpath  = '/Volumes/Chengxin/SH'                          # root path for this data processing
 CCFDIR    = os.path.join(rootpath,'CCF')                    # dir where CC data is stored
 STACKDIR  = os.path.join(rootpath,'STACK') 
 
@@ -51,7 +51,7 @@ substack_len= fc_para['substack_len']
 
 # stacking para
 f_substack = True                                           # whether to do sub-stacking (different from that in S1)
-f_substack_len = 10*cc_len                                  # length for sub-stacking to output
+f_substack_len = 2*substack_len                                  # length for sub-stacking to output
 out_format   = 'ASDF'                                       # ASDF or SAC format for output
 flag         = True                                         # output intermediate args for debugging
 stack_method = 'pws'                                        # linear, pws
@@ -177,6 +177,7 @@ for ipath in range (rank,splits+size-extra,size):
                     for iii in range(substacks.shape[0]):
                         tparameters['time']  = stime[iii]
                         tparameters['ngood'] = num_stacks[iii]
+                        tparameters['stack_method'] = stack_method
                         tpath     = ttr[2][-1]+ttr[6][-1]
                         data_type = 'T'+str(int(stime[iii]))
                         ds.add_auxiliary_data(data=substacks[iii], data_type=data_type, path=tpath, parameters=tparameters)
@@ -191,6 +192,7 @@ for ipath in range (rank,splits+size-extra,size):
             with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds:
                 tparameters['time']  = alltime
                 tparameters['ngood'] = numstacks
+                tparameters['stack_method'] = stack_method
                 tpath     = ttr[2][-1]+ttr[6][-1]
                 data_type = 'Allstack'
                 ds.add_auxiliary_data(data=allstacks, data_type=data_type, path=tpath, parameters=tparameters)

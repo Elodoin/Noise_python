@@ -1,23 +1,23 @@
 # About NoisePy
-NoisePy is a Python package designed for fast and easy ambient noise cross-correlation. In particular, the package includes a series of functions/methods for ambient noise monitoring application. 
+NoisePy is a Python package designed for fast and easy ambient noise cross-correlation, with a particular emphasise on ambient noise monitoring application. 
 
 [![](https://img.shields.io/badge/docs-latest-blue.svg)](https://github.come/mdenolle/NoisPy/latest) [![Build Status](https://travis-ci.org/mdenolle/Noise.jl.svg?branch=master)](https://travis-ci.org/mdenolle/NoisePy) [![Coverage Status](https://coveralls.io/repos/github/mdenolle/Noise.jl/badge.svg?branch=master)](https://coveralls.io/github/mdenolle/NoisePy?branch=master)
 
 <img src="/docs/src/logo.png" width="800" height="400">
  
 # Installation
-This package contains 3 main python scripts, 1 dependent module named as `noise_module` and 1 plotting module called `plot_modules`. The scripts are depended on some common python library, which are listed below. We recommend to install them using [conda](https://docs.conda.io/en/latest/) or [pip](https://pypi.org/project/pip/). Due to the availablility of multiple version of dependent library, we did not exclusively tested their performance. But the information provided below works well on `macOS Mojave (10.14.5)`. 
+This package contains 3 main python scripts with 1 dependent module (`noise_module`) and 1 plotting module ( `plot_modules`). The scripts are depended on some common python libraries, which are listed below. We recommend to install them using [conda](https://docs.conda.io/en/latest/) or [pip](https://pypi.org/project/pip/). Due to the availablility of multiple version of dependent libraries, we did not exclusively tested their performance on our package. But the information provided below works well on `macOS Mojave (10.14.5)`. 
 
-    |  **library**  |  **version**  |\
-:------:|:----------:|:----------:|\
-[numpy](https://numpy.org/)|  1.16.3|\
-[scipy](https://www.scipy.org/) | 1.3.0|\
-[numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/) | 0.44.1|\
-[obspy](https://github.com/obspy/obspy/wiki) |1.1.1|\
-[pandas](https://pandas.pydata.org/) | 0.24.2|\
-[pyasdf](http://seismicdata.github.io/pyasdf/) |0.4.0|\
-[python](https://www.python.org/) |3.7.3|\
-[mpi4py](https://mpi4py.readthedocs.io/en/stable/) | 3.0.1|
+|  **library**  |  **version**  |
+|:-------------:|:-------------:|
+|[numpy](https://numpy.org/)|  1.16.3|
+|[scipy](https://www.scipy.org/) | 1.3.0|
+|[numba](https://devblogs.nvidia.com/numba-python-cuda-acceleration/) | 0.44.1|
+|[obspy](https://github.com/obspy/obspy/wiki) |1.1.1|
+|[pandas](https://pandas.pydata.org/) | 0.24.2|
+|[pyasdf](http://seismicdata.github.io/pyasdf/) |0.4.0|
+|[python](https://www.python.org/) |3.7.3|
+|[mpi4py](https://mpi4py.readthedocs.io/en/stable/) | 3.0.1|
 
 
 # Functionality

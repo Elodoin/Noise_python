@@ -43,7 +43,7 @@ tt0=time.time()
 ########################################
 
 #------absolute path parameters-------
-rootpath  = '/Users/chengxin/Documents/NoisePy/LA_example'              # root path for this data processing
+rootpath  = '/Volumes/Chengxin/SH/'                     # root path for this data processing
 FFTDIR    = os.path.join(rootpath,'FFT')                # dir to store FFT data
 CCFDIR    = os.path.join(rootpath,'CCF')                # dir to store CC data
 DATADIR   = os.path.join(rootpath,'RAW_DATA')           # dir where noise data is located
@@ -60,13 +60,13 @@ flag        = True              # print intermediate variables and computing tim
 
 # pre-processing parameters 
 cc_len    = 3600                # basic unit of data length for fft (s)
-step      = 1800                # overlapping between each cc_len (s)
+step      = 900                 # overlapping between each cc_len (s)
 smooth_N  = 100                 # moving window length for time/freq domain normalization if selected
 
 # cross-correlation parameters
-maxlag         = 200            # lags (s) of cross-correlation to save
-substack       = False          # sub-stack daily cross-correlation or not
-substack_len   = 3*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
+maxlag         = 400            # lags (s) of cross-correlation to save
+substack       = True           # sub-stack daily cross-correlation or not
+substack_len   = 6*cc_len       # Time unit in sectons to stack over: need to be integer times of cc_len
 smoothspect_N  = 10             # moving window length to smooth spectrum amplitude
 
 # load useful download info if start from ASDF
@@ -125,7 +125,7 @@ if rank == 0:
 
     # set variables to broadcast
     if input_fmt == 'ASDF':
-        tdir = sorted(glob.glob(os.path.join(DATADIR,'*.h5')))
+        tdir = sorted(glob.glob(os.path.join(DATADIR,'2014_10_2*.h5')))
     else:
         tdir = sorted(glob.glob(os.path.join(DATADIR,'Event_*')))
         # get nsta by loop through all event folder

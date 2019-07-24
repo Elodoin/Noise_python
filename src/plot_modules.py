@@ -83,7 +83,7 @@ def plot_substack_cc(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir=None
         dist = ds.auxiliary_data[dtype][ipath].parameters['dist']
         ngood= ds.auxiliary_data[dtype][ipath].parameters['ngood']
         ttime= ds.auxiliary_data[dtype][ipath].parameters['time']
-        timestamp = np.empty(len(ttime),dtype='datetime64[s]')
+        timestamp = np.empty(ttime.size,dtype='datetime64[s]')
         
         # cc matrix
         data = ds.auxiliary_data[dtype][ipath].data[indx1:indx2]
@@ -114,12 +114,15 @@ def plot_substack_cc(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir=None
         ax[1].legend(['relative amp','ngood'],loc='upper right')
 
         # save figure or just show
-        if sdir==None:sdir = sfile.split('.')[0]
-        if not os.path.isdir(sdir):os.mkdir(sdir)
-        outfname = sdir+'/{0:s}{1:s}_{2:s}_{3:s}{4:s}_{5:s}.pdf'.format(net1,sta1,chan1,net2,sta2,chan2)
-        fig.savefig(outfname, format='pdf', dpi=400)
-        fig.close()
-
+        if savefig:
+            if sdir==None:sdir = sfile.split('.')[0]
+            if not os.path.isdir(sdir):os.mkdir(sdir)
+            outfname = sdir+'/{0:s}{1:s}_{2:s}_{3:s}{4:s}_{5:s}.pdf'.format(net1,sta1,chan1,net2,sta2,chan2)
+            fig.savefig(outfname, format='pdf', dpi=400)
+            fig.close()
+        else:
+            plt.show()
+            fig.close()
 
 def plot_substack_moveout(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir=None):
     '''
@@ -200,7 +203,7 @@ def plot_substack_moveout(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir
 
 def plot_substack_all(sfile,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sdir=None):
     '''
-    display the 2D matrix of the cross-correlation functions for all time windows.
+    display the 2D matrix of the cross-correlation functions stacked for all time windows.
 
     INPUT parameters:
     sfile: cross-correlation functions outputed by S2
@@ -215,21 +218,21 @@ def plot_substack_all(sfile,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
     if savefig:
         if sdir==None:print('no path selected! save figures in the default path')
 
+    paths = ccomp
     try:
         ds = pyasdf.ASDFDataSet(sfile,mode='r')
+        # extract common variables
+        dtype_lists = ds.auxiliary_data.list()[1:]
+        dt     = ds.auxiliary_data[dtype_lists[0]][paths].parameters['dt']
+        dist   = ds.auxiliary_data[dtype_lists[0]][paths].parameters['dist']
+        maxlag = ds.auxiliary_data[dtype_lists[0]][paths].parameters['maxlag']
     except Exception:
         print("exit! cannot open %s to read"%sfile);sys.exit()
 
-    # extract common variables
-    dtype_lists = ds.auxiliary_data.list()[1:]
-    paths  = ccomp
-    dt     = ds.auxiliary_data[dtype_lists[0]][paths].parameters['dt']
-    dist   = ds.auxiliary_data[dtype_lists[0]][paths].parameters['dist']
-    maxlag = ds.auxiliary_data[dtype_lists[0]][paths].parameters['maxlag']
-
     # lags for display   
     if not disp_lag:disp_lag=maxlag
-    t = np.arange(-int(disp_lag),int(disp_lag),step=int(2*int(disp_lag)/5)) 
+    if disp_lag>maxlag:raise ValueError('lag excceds maxlag!')
+    t = np.arange(-int(disp_lag),int(disp_lag),step=int(2*int(disp_lag)/4)) 
     indx1 = int((maxlag-disp_lag)/dt)
     indx2 = indx1+2*int(disp_lag/dt)+1
 
@@ -269,12 +272,12 @@ def plot_substack_all(sfile,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
         if not os.path.isdir(sdir):os.mkdir(sdir)
         outfname = sdir+'/{0:s}.pdf'.format(sfile.split('/')[-1])
         fig.savefig(outfname, format='pdf', dpi=400)
-        fig.close()
+        plt.close()
     else:
         plt.show()
-        fig.close()
 
-def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sdir=None):
+
+def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,dist_inc,disp_lag=None,savefig=False,sdir=None):
     '''
     display the moveout of the cross-correlation functions stacked for all time chuncks.
 
@@ -282,29 +285,32 @@ def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
     sfile: cross-correlation functions outputed by S2
     freqmin: min frequency to be filtered
     freqmax: max frequency to be filtered
+    ccomp:   cross component
+    dist_inc: distance bins to stack over
+    disp_lag: lag times for displaying
     savefig: set True to save the figures (in pdf format)
     sdir: diresied directory to save the figure (if not provided, save to default dir)
 
-    USAGE: plot_substack_moveout('temp.h5',0.1,1)
+    USAGE: plot_substack_moveout('temp.h5',0.1,0.2,1,'ZZ',200,True,'./temp')
     '''
     # open data for read
     if savefig:
         if sdir==None:print('no path selected! save figures in the default path')
     
+    dtype = 'Allstack'
+    path  = ccomp
+
     # extract common variables
     try:
-        ds = pyasdf.ASDFDataSet(sfiles[0],mode='r')
+        ds    = pyasdf.ASDFDataSet(sfiles[0],mode='r')
+        dt    = ds.auxiliary_data[dtype][path].parameters['dt']
+        maxlag= ds.auxiliary_data[dtype][path].parameters['maxlag']
     except Exception:
         print("exit! cannot open %s to read"%sfiles[0]);sys.exit()
     
-    dtype = 'Allstack'
-    path  = ccomp
-    dt    = ds.auxiliary_data[dtype][path].parameters['dt']
-    maxlag= ds.auxiliary_data[dtype][path].parameters['maxlag']
-    
     # lags for display   
     if not disp_lag:disp_lag=maxlag
-    t = np.arange(-int(disp_lag),int(disp_lag),step=(int(2*int(disp_lag)/5)))
+    t = np.arange(-int(disp_lag),int(disp_lag)+dt,step=(int(2*int(disp_lag)/4)))
     indx1 = int((maxlag-disp_lag)/dt)
     indx2 = indx1+2*int(disp_lag/dt)+1
 
@@ -314,41 +320,53 @@ def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
     dist = np.zeros(nwin,dtype=np.float32)
     ngood= np.zeros(nwin,dtype=np.int16)    
 
+    # load cc and parameter matrix
     for ii in range(len(sfiles)):
         sfile = sfiles[ii]
 
+        ds = pyasdf.ASDFDataSet(sfile,mode='r')
         try:
-            ds = pyasdf.ASDFDataSet(sfile,mode='r')
+            # load data to variables
+            dist[ii] = ds.auxiliary_data[dtype][path].parameters['dist']
+            ngood[ii]= ds.auxiliary_data[dtype][path].parameters['ngood']
+            tdata    = ds.auxiliary_data[dtype][path].data[indx1:indx2]
         except Exception:
-            print("exit! cannot open %s to read"%sfile);sys.exit()
-
-        # load data to variables
-        dist[ii] = ds.auxiliary_data[dtype][path].parameters['dist']
-        ngood[ii]= ds.auxiliary_data[dtype][path].parameters['ngood']
-        tdata    = ds.auxiliary_data[dtype][path].data[indx1:indx2]
+            print("continue! cannot read %s "%sfile);continue
 
         data[ii] = bandpass(tdata,freqmin,freqmax,int(1/dt),corners=4, zerophase=True)
-        data[ii] /= max(data[ii])
 
-    ndist = np.argsort(dist)
-    data = data[ndist]
+    # average cc
+    ntrace = int(np.round(np.max(dist)+0.51)/dist_inc)
+    ndata  = np.zeros(shape=(ntrace,indx2-indx1),dtype=np.float32)
+    ndist  = np.zeros(ntrace,dtype=np.float32)
+    for td in range(0,ntrace):
+        tindx = np.where((dist<=td+dist_inc)&(dist>td))[0]
+        if len(tindx):
+            ndata[td] = np.mean(data[tindx],axis=0)
+            ndist[td] = (td+0.5)*dist_inc
 
-    # plotting
+    # normalize waveforms 
+    indx  = np.where(ndist>0)[0]
+    ndata = ndata[indx]
+    ndist = ndist[indx]
+    for ii in range(ndata.shape[0]):
+        ndata[ii] /= np.max(np.abs(ndata[ii]))
+
+    # plotting figures
     fig,ax = plt.subplots()
-    ax.matshow(data,cmap='seismic',extent=[-disp_lag,disp_lag,dist[ndist[-1]],dist[ndist[0]]],aspect='auto')
+    ax.matshow(ndata,cmap='seismic',extent=[-disp_lag,disp_lag,ndist[-1],ndist[0]],aspect='auto')
     ax.set_title('moveout allstack')
     ax.set_xlabel('time [s]')
     ax.set_ylabel('distance [km]')
     ax.set_xticks(t)
-    #ax.grid(True)
     ax.xaxis.set_ticks_position('bottom')
     #ax.text(np.ones(len(ndist))*(disp_lag-5),dist[ndist],ngood[ndist],fontsize=8)
     
-    # save figure or just show
+    # save figure or show
     if savefig:
-        outfname = sdir+'/moveout_allstack.pdf'
+        outfname = sdir+'/moveout_allstack_'+str(dist_inc)+'kmbin.pdf'
         fig.savefig(outfname, format='pdf', dpi=400)
-        fig.close()
+        plt.close()
     else:
-        plt.show()
-        fig.close()
+        fig.show()
+
