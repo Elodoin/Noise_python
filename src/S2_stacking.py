@@ -37,7 +37,7 @@ STACKDIR  = os.path.join(rootpath,'STACK')
 pfiles    = glob.glob(os.path.join(CCFDIR,'paths_*.lst'))
 
 # load fc_para from S1
-fc_metadata = os.path.join(rootpath,'fft_cc_data.txt')
+fc_metadata = os.path.join(CCFDIR,'fft_cc_data.txt')
 fc_para     = eval(open(fc_metadata).read())
 samp_freq   = fc_para['samp_freq']
 start_date  = fc_para['start_date']
@@ -51,7 +51,7 @@ substack_len= fc_para['substack_len']
 
 # stacking para
 f_substack = True                                           # whether to do sub-stacking (different from that in S1)
-f_substack_len = 72*cc_len                                  # length for sub-stacking to output
+f_substack_len = 10*cc_len                                  # length for sub-stacking to output
 out_format   = 'ASDF'                                       # ASDF or SAC format for output
 flag         = True                                         # output intermediate args for debugging
 stack_method = 'pws'                                        # linear, pws
@@ -65,7 +65,7 @@ stack_para={'samp_freq':samp_freq,'cc_len':cc_len,'step':step,'rootpath':rootpat
     'substack':substack,'substack_len':substack_len,'maxlag':maxlag,'MAX_MEM':MAX_MEM,\
     'f_substack':f_substack,'f_substack_len':f_substack_len,'stack_method':stack_method}
 # save fft metadata for future reference
-stack_metadata  = os.path.join(rootpath,'stack_data.txt') 
+stack_metadata  = os.path.join(STACKDIR,'stack_data.txt') 
 
 #######################################
 ###########PROCESSING SECTION##########
@@ -120,7 +120,9 @@ for ipath in range (rank,splits+size-extra,size):
 
         # crude estimation on memory needs (assume float32)
         num_chunck  = len(ccfiles)
-        num_segmts  = int(np.round(inc_hours*3600/substack_len))
+        if substack:
+            num_segmts = int(np.floor((inc_hours*3600-cc_len)/step))+1
+        else: num_segmts = 1
         npts_segmt  = int(2*maxlag*samp_freq)+1
         memory_size = num_chunck*num_segmts*npts_segmt*4/1024**3
         if memory_size > MAX_MEM:

@@ -112,17 +112,14 @@ def plot_substack_cc(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir=None
         ax[1].set_xlabel('waveform number')
         ax[1].set_xticks(np.arange(0,nwin,2))
         ax[1].legend(['relative amp','ngood'],loc='upper right')
-        plt.show()
-        sys.exit()
 
         # save figure or just show
-        if savefig:
-            if sdir==None:sdir = sfile.split('.')[0]
-            if not os.path.isdir(sdir):os.mkdir(sdir)
-            outfname = sdir+'/{0:s}{1:s}_{2:s}_{3:s}{4:s}_{5:s}.pdf'.format(net1,sta1,chan1,net2,sta2,chan2)
-            fig.savefig(outfname, format='pdf', dpi=400)
-        else:
-            plt.show()
+        if sdir==None:sdir = sfile.split('.')[0]
+        if not os.path.isdir(sdir):os.mkdir(sdir)
+        outfname = sdir+'/{0:s}{1:s}_{2:s}_{3:s}{4:s}_{5:s}.pdf'.format(net1,sta1,chan1,net2,sta2,chan2)
+        fig.savefig(outfname, format='pdf', dpi=400)
+        fig.close()
+
 
 def plot_substack_moveout(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir=None):
     '''
@@ -192,8 +189,10 @@ def plot_substack_moveout(sfile,freqmin,freqmax,disp_lag=None,savefig=False,sdir
     if savefig:
         outfname = sdir+'/moveout_'+sfile.split('.')[0].split('/')[-1]+'.pdf'
         fig.savefig(outfname, format='pdf', dpi=400)
+        fig.close()
     else:
         plt.show()
+        fig.close()
 
 #############################################################################
 ###############PLOTTING FUNCTIONS FOR FILES FROM S2##########################
@@ -270,8 +269,10 @@ def plot_substack_all(sfile,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
         if not os.path.isdir(sdir):os.mkdir(sdir)
         outfname = sdir+'/{0:s}.pdf'.format(sfile.split('/')[-1])
         fig.savefig(outfname, format='pdf', dpi=400)
+        fig.close()
     else:
         plt.show()
+        fig.close()
 
 def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sdir=None):
     '''
@@ -347,5 +348,7 @@ def plot_all_moveout(sfiles,freqmin,freqmax,ccomp,disp_lag=None,savefig=False,sd
     if savefig:
         outfname = sdir+'/moveout_allstack.pdf'
         fig.savefig(outfname, format='pdf', dpi=400)
+        fig.close()
     else:
         plt.show()
+        fig.close()

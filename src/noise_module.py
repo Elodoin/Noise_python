@@ -911,7 +911,7 @@ def optimized_correlate(fft1_smoothed_abs,fft2,D,Nfft,dataS_t):
         s_corr = np.zeros(Nfft,dtype=np.float32)
         t_corr = dataS_t[0]
         crap   = np.zeros(Nfft,dtype=np.complex64)
-        crap[:Nfft2] = np.mean(corr[nwin,:],axis=0)   # linear average of the correlation
+        crap[:Nfft2] = np.mean(corr[:,:],axis=0)   # linear average of the correlation
         crap[:Nfft2] = crap[:Nfft2]-np.mean(crap[:Nfft2],axis=0)
         crap[-(Nfft2)+1:]=np.flip(np.conj(crap[1:(Nfft2)]),axis=0)
         s_corr = np.real(np.fft.ifftshift(scipy.fftpack.ifft(crap, Nfft, axis=0)))

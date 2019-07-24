@@ -21,17 +21,17 @@ This package contains 3 main python scripts with 1 dependent module named as `no
 
 
 # Functionality
-* download continous noise data based on obspy's [mass download](https://docs.obspy.org/packages/autogen/obspy.clients.fdsn.mass_downloader.html) module and save them in [ASDF](https://asdf-definition.readthedocs.io/en/latest/) format, which convinently assemble meta data, wavefrom data and auxililary data into one single file
+* download continous noise data based on obspy's [mass download](https://docs.obspy.org/packages/autogen/obspy.clients.fdsn.mass_downloader.html) module and save data in [ASDF](https://asdf-definition.readthedocs.io/en/latest/) format, which convinently assemble meta, wavefrom and auxililary data into one single file
 * perform fast and easy cross-correlation for downloaded seismic data in ASDF format as 
 well as those stored on local machine as SAC/miniSEED format
 * do linear or phase weighted stacking (substacking) to the cross-correlation functions 
-* all scripts are coded with functionality of running in parallel
-* provide several options to measure dv/v on the resulted cross-correlation functions
+* all scripts are coded with MPI functionality to run in parallel
+* several functions are provided to measure dv/v on the resulted cross-correlation functions
 
 # Short tutorial
 **1. Downloading seismic noise data (`S0_download_MPI.py`)**
-
-    interested in noise data from a region without prior station info\
+interested in noise data from a region without prior station info\
+    
     In this example, we aim to download all broadband CI stations around LA operated during 1/Jan/2008, and store the data as two chuncks, each with 12 h long continous recordings.  
     To do this, we set `inc_hours=12` in the script. Also, `down_list` is set to be `False` since no station info is provided, and the info on the targeted region is given at Lxx. `flag` should be `True` if intermediate outputs/operational time is needed during downloading process. To run the code on a single core, go to your terminal setup with a python environment with required library as suggested above and run `python S0_download_ASDF_MPI.py`  
 
@@ -52,6 +52,8 @@ well as those stored on local machine as SAC/miniSEED format
     (show the cross-correlation functions from one single station) 
 
 **3. Do stacking (`S2_stacking.py`)**\
-    This script 
+    This script assembles all computed cross-correlation functions from S1, and performs final stacking (including substacking) of them. in particular, two options of linear and pws stacking methods are provided. 
+
+<img src="/docs/src/linear_stack.png" width="400" height="250"><img src="/docs/src/pws_stack.png" width="400" height="250">
 
 

@@ -42,32 +42,32 @@ A beginning of wonderful NoisePy journey!
 tt0=time.time()
 
 # paths and filenames
-rootpath = '/Users/chengxin/Documents/NoisePy/LA_example' 
+rootpath = '/Users/chengxin/Documents/NoisePy_example' 
 DATADIR  = os.path.join(rootpath,'RAW_DATA')         # where to store the downloaded data
 stalist  = os.path.join(rootpath,'station.lst')      # CSV file for station location info
 
 # download parameters
-client    = Client('SCEDC')                      # client/data center. see https://docs.obspy.org/packages/obspy.clients.fdsn.html for a list
+client    = Client('IRIS')                      # client/data center. see https://docs.obspy.org/packages/obspy.clients.fdsn.html for a list
 down_list = False                               # download stations from pre-compiled list
-oput_CSV  = False                               # output station.list to a CSV file to be used in later stacking steps
+oput_CSV  = False                               # output station.list to a CSV file for future reference
 flag      = False                               # print progress when running the script
 NewFreq   = 10                                  # resampling at X samples per seconds 
 rm_resp   = False                               # False to not remove, True to remove, but 'inv' to remove with inventory
-respdir   = 'none'                              # output response directory (required if rm_resp is true and other than inv)
+respdir   = 'none'                              # dir of response files (required if rm_resp is true and other than inv)
 freqmin   = 0.05                                # pre filtering frequency bandwidth
-freqmax   = 3
+freqmax   = 3                                   # note this cannot exceed Nquist freq
 out_form  = 'ASDF'                              # choose between ASDF and SAC
 
 # station/network information 
-lamin,lomin,lamax,lomax=33.9,-118.5,34.1,-118   # regional box: min lat, min lon, max lat, max lon
+lamin,lomin,lamax,lomax=47,-124,49,-121         # regional box: min lat, min lon, max lat, max lon
 dchan= ['BH*']                                  # channel if down_list=false
-dnet = ["CI"]                                   # network  
+dnet = ["TA"]                                   # network  
 dsta = ["*"]                                    # station (do either one station or *)
 
 # target time range and interval 
 start_date = ["2008_01_01_0_0_0"]               # start date of download
-end_date   = ["2008_01_02_0_0_0"]               # end date of download
-inc_hours  = 12                                 # length of data for each request (in hour)
+end_date   = ["2008_01_03_0_0_0"]               # end date of download
+inc_hours  = 24                                 # length of data for each request (in hour)
 
 # pre-processing parameters: estimate memory needs
 cc_len    = 3600                                # basic unit of data length for fft (s)
