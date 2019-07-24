@@ -30,14 +30,13 @@ well as those stored on local machine as SAC/miniSEED format
 
 # Short tutorial
 **1. Downloading seismic noise data (`S0_download_MPI.py`)**
-interested in noise data from a region without prior station info\
     
     In this example, we aim to download all broadband CI stations around LA operated during 1/Jan/2008, and store the data as two chuncks, each with 12 h long continous recordings.  
     To do this, we set `inc_hours=12` in the script. Also, `down_list` is set to be `False` since no station info is provided, and the info on the targeted region is given at Lxx. `flag` should be `True` if intermediate outputs/operational time is needed during downloading process. To run the code on a single core, go to your terminal setup with a python environment with required library as suggested above and run `python S0_download_ASDF_MPI.py`  
 
     If you want to use multiple cores (e.g, 3), run the script with `mpirun -n 3 python S0_download_ASDF_MPI.py`\
 
-![downloaded data](/docs/src/downloaded.png)\
+![downloaded data](/docs/src/downloaded.png)
 
     Two files with 12 hour long continous recordings. The names are pretty straightforward to understand. (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md)\
 
@@ -54,6 +53,12 @@ interested in noise data from a region without prior station info\
 **3. Do stacking (`S2_stacking.py`)**\
     This script assembles all computed cross-correlation functions from S1, and performs final stacking (including substacking) of them. in particular, two options of linear and pws stacking methods are provided. 
 
+    Below is an example to plot the move-out of the final stacked cross-correlation.
+    ```python
+    import plot_modules,glob
+    sfiles = glob.glob('/Users/chengxin/Documents/NoisePy_example/SCAL/STACK/*/linear*.h5')
+    plot_modules.plot_all_moveout1(sfiles,0.1,0.2,'ZZ',1,200,True,'/Users/chengxin/Documents/NoisePy_example/SCAL/STACK')
+    ```
 <img src="/docs/src/linear_stack.png" width="400" height="250"><img src="/docs/src/pws_stack.png" width="400" height="250">
 
 
