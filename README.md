@@ -31,7 +31,7 @@ well as those stored on local machine as SAC/miniSEED format
 # Short tutorial
 **1. Downloading seismic noise data (`S0_download_MPI.py`)**
     
-In this example, we aim to download all broadband CI stations operated during 4/Jul/2016, and store the data as one chunck of 24 h long continous recordings.  
+In this example, we aim to download all broadband CI stations operated at 4/Jul/2016, and we store the data as one chunck of 24-h continous recordings.  
 
 To do this, we set `inc_hours=24` in the script. Also, `down_list` is set to be `False` since no station info is provided, and the info on the targeted region is given at L64. `flag` should be `True` if intermediate outputs/operational time is needed during downloading process. To run the code on a single core, go to your terminal with a python environment of required libraries and run following command. 
 
@@ -46,22 +46,26 @@ mpirun -n 4 python S0_download_ASDF_MPI.py
 
 ![downloaded data](/docs/src/downloaded.png)
 
-Two files with 12 hour long continous recordings. The names are pretty straightforward to understand. (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md)\
+The snapshot above shows the output file from S1 with 24 hour long continous recordings. The names are pretty straightforward to understand. (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md) We can plot the continous waveforms using the plotting functions in the `plot_modules` like this.\
 
 ```python
-import plot_modules                                                                                            sfile = '/Users/chengxin/Documents/NoisePy_example/SCAL/RAW_DATA/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'   plot_modules.plot_waveform(sfile,'CI','USC',0.01,0.4)                                                          
+import plot_modules
+sfile = '/Users/chengxin/Documents/SCAL/RAW_DATA/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'
+plot_modules.plot_waveform(sfile,'CI','USC',0.01,0.4)                                                          
 ```
 <img src="/docs/src/waveform.png" width="800" height="200">
 
-This time we try to download the data with a station list. For example, we use the station list outputed from example 1a to be here. To run this example, change the `down_list` to be `True`. This time, the region information will be useless.  
+Note that the script also offers the flexibility to download data from a station list. For example, we use the station list outputed from example 1a to be here. To run this example, change the `down_list` to be `True`. The users are encouraged to try them.   
 
 **2. Perform cross correlations (`S1_fft_cc_MPI.py`)**\
-This is the core script of NoisePy, which performs fft to the noise data for all of the data first before they are cross-correlated in frequency domain. Several options are provided for the cross correlation, including `raw`, `coherency` and `deconv`. We choose 'decon' as an example here.
+This is the core script of NoisePy, which performs fft to the noise data for all of the data first before they are cross-correlated in frequency domain. Several options are provided for the cross correlation, including `raw`, `coherency` and `deconv`. We choose 'decon' as an example here. As you will find, this script creates a new folder of `CCF` with an ASDF file of the same name as the downloaded file. We can again examine the cross-correlation functions of each small segments defined in the script, and show its temporal variations. 
 
 ```python
-import plot_modules                                                                                            sfile = '/Users/chengxin/Documents/NoisePy_example/SCAL/RAW_DATA/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'   plot_modules.plot_substack_cc(sfile,'CI','USC',0.01,0.4)                                                       
+import plot_modules
+sfile = '/Users/chengxin/Documents/SCAL/CCF/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'
+plot_modules.plot_substack_cc(sfile,0.1,0.2,200,True,'/Users/chengxin/Documents/SCAL/CCF/figures')     
 ```
-<img src="/docs/src/waveform.png" width="800" height="200">
+<img src="/docs/src/substack_cc.png" width="800" height="200">
 
 **3. Do stacking (`S2_stacking.py`)**\
 This script assembles all computed cross-correlation functions from S1, and performs final stacking (including substacking) of them. in particular, two options of linear and pws stacking methods are provided. 
@@ -69,9 +73,9 @@ This script assembles all computed cross-correlation functions from S1, and perf
 Below is an example to plot the move-out of the final stacked cross-correlation.
 ```python
 import plot_modules,glob
-sfiles = glob.glob('/Users/chengxin/Documents/NoisePy_example/SCAL/STACK/*/linear*.h5')
-plot_modules.plot_all_moveout1(sfiles,0.1,0.2,'ZZ',1,200,True,'/Users/chengxin/Documents/NoisePy_example/SCAL/STACK')
+sfiles = glob.glob('/Users/chengxin/Documents/SCAL/STACK/*/linear*.h5')
+plot_modules.plot_all_moveout1(sfiles,0.1,0.2,'ZZ',1,200,True,'/Users/chengxin/Documents/SCAL/STACK')
 ```
 <img src="/docs/src/linear_stack.png" width="400" height="250"><img src="/docs/src/pws_stack.png" width="400" height="250">
 
-
+Note that, although we only show the process of one component data, the scripts are able to handle 3-component data as well. We encourage you to download the package and play it on your own!
