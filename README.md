@@ -44,7 +44,7 @@ If you want to use multiple cores (e.g, 4), run the script with the following co
 mpirun -n 4 python S0_download_ASDF_MPI.py
 ```
 
-<img src="/docs/src/downloaded.png" width="800" height="30">
+<img src="/docs/src/downloaded.png" width="700" height="30">
 
 The snapshot above shows the output file from S1 with 24 hour long continous recordings. The names are pretty straightforward to understand. (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md) We can plot the continous waveforms using the plotting functions in the `plot_modules` like this.\
 
@@ -53,7 +53,7 @@ import plot_modules
 sfile = '/Users/chengxin/Documents/SCAL/RAW_DATA/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'
 plot_modules.plot_waveform(sfile,'CI','USC',0.01,0.4)                                                          
 ```
-<img src="/docs/src/waveform.png" width="800" height="200">
+<img src="/docs/src/waveform.png" width="800" height="250">
 
 Note that the script also offers the flexibility to download data from a station list. For example, we use the station list outputed from example 1a to be here. To run this example, change the `down_list` to be `True`. The users are encouraged to try them.   
 
@@ -65,7 +65,7 @@ import plot_modules
 sfile = '/Users/chengxin/Documents/SCAL/CCF/2016_07_04_00_00_00T2016_07_05_00_00_00.h5'
 plot_modules.plot_substack_cc(sfile,0.1,0.2,200,True,'/Users/chengxin/Documents/SCAL/CCF/figures')     
 ```
-<img src="/docs/src/substack_cc.png" width="800" height="200">
+<img src="/docs/src/substack_cc.png" width="800" height="250">
 
 **3. Do stacking (`S2_stacking.py`)**\
 This script assembles all computed cross-correlation functions from S1, and performs final stacking (including substacking) of them. in particular, two options of linear and pws stacking methods are provided. 
@@ -76,6 +76,6 @@ import plot_modules,glob
 sfiles = glob.glob('/Users/chengxin/Documents/SCAL/STACK/*/linear*.h5')
 plot_modules.plot_all_moveout1(sfiles,0.1,0.2,'ZZ',1,200,True,'/Users/chengxin/Documents/SCAL/STACK')
 ```
-<img src="/docs/src/linear_stack.png" width="400" height="250"><img src="/docs/src/pws_stack.png" width="400" height="250">
+<img src="/docs/src/linear_stack.png" width="400" height="280"><img src="/docs/src/pws_stack.png" width="400" height="280">
 
 Note that, although we only show the process of one component data, the scripts are able to handle 3-component data as well. We encourage you to download the package and play it on your own!
