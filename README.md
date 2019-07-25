@@ -44,7 +44,7 @@ If you want to use multiple cores (e.g, 4), run the script with the following co
 mpirun -n 4 python S0_download_ASDF_MPI.py
 ```
 
-![downloaded data](/docs/src/downloaded.png)
+<img src="/docs/src/downloaded.png" width="800" height="50">
 
 The snapshot above shows the output file from S1 with 24 hour long continous recordings. The names are pretty straightforward to understand. (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md) We can plot the continous waveforms using the plotting functions in the `plot_modules` like this.\
 
