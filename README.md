@@ -39,7 +39,7 @@ If you want to use multiple cores (e.g, 4), run the script with the following co
 mpirun -n 4 python S0_download_ASDF_MPI.py
 ```
 
-<img src="/docs/src/downloaded.png" width="800" height="40">
+<img src="/docs/src/downloaded.png" width="850" height="100">
 
 The snapshot above shows the output files from S0A, which includes a ASDF file containing the 24-h continous noise data for all available stations, a parameter file recording all used parameters in the script of S0A and a CSV file showing the station information (more details on reading the ASDF files with downloaded data can be found in docs/src/ASDF.md). The continous waveforms data stored in the ASDF file can be displayed using the plotting modules named as `plot_modules` in the directory of `src` as shown below.
 
@@ -48,7 +48,7 @@ import plotting_modules (cd to your source file directory first before loading t
 sfile = '/Users/chengxin/Documents/SCAL/RAW_DATA/2016_07_01_00_00_00T2016_07_02_00_00_00.h5'
 plotting_modules.plot_waveform(sfile,'CI','BLC',0.01,0.4)                                                          
 ```
-<img src="/docs/src/waveform3.png" width="800" height="250">
+<img src="/docs/src/waveform3.png" width="880" height="580">
 
 Note that the script also offers the flexibility to download data from an existing station list with a format same to the outputed CSV file. In this case, the variable of `down_list` should be set to `True` at Lxx. We want to NOTE that the downloading speed is dependent on many factors such as the original sampling rate of the data, the networks you are requesting, the data center the data is hosted upon and the general structure to store on your machine et. We tested a bunch of the parameters to evaluate their performance and the readers are referred to our paper for some details. 
 
@@ -63,7 +63,7 @@ import plotting_modules
 sfile = '/Users/chengxin/Documents/SCAL/CCF/2016_07_01_00_00_00T2016_07_02_00_00_00.h5'
 plot_modules.plot_substack_cc(sfile,0.1,0.2,200,True,'/Users/chengxin/Documents/SCAL/CCF/figures')     
 ```
-<img src="/docs/src/substack_cc_NN.png" width="400" height="300"><img src="/docs/src/substack_cc_ZZ.png" width="400" height="300">
+<img src="/docs/src/substack_cc_NN.png" width="400" height="190"><img src="/docs/src/substack_cc_ZZ.png" width="400" height="190">
 
 **3. Do stacking with `S2_stacking.py`**\
 This script is used to assemble and/or stack all cross-correlation functions computed for the staion pairs in S1 and save them into ASDF files for future analysis (e.g., temporal variation and/or dispersion extraction). In particular, there are two options for the stacking process, including linear and phase weighted stacking (pws). In general, the pws produces waveforms with high SNR, and the snapshot below shows the waveform comparison from the two stacking methods. We use the folloing commend lines to make the move-out plot.
