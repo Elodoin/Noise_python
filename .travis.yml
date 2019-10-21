@@ -30,5 +30,5 @@ script:
   - ls src
   - python src/S0A_download_ASDF_MPI.py
   - python src/S1_fft_cc_MPI.py
-  - python 
+  - python src/S2_stacking.py
   - codecov --token=<04cd2c14-dec0-4fc9-a645-d38b536ee2f4>
