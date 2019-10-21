@@ -827,7 +827,7 @@ def check_sample_gaps(stream,date_info):
     if len(stream)==0 or len(stream)>100:
         stream = []
         return stream
-
+    
     # remove traces with big gaps
     if portion_gaps(stream,date_info)>0.3:
         stream = []
@@ -839,8 +839,6 @@ def check_sample_gaps(stream,date_info):
     freq = max(freqs)
     for tr in stream:
         if int(tr.stats.sampling_rate) != freq:
-            stream.remove(tr)
-        if tr.stats.npts < 10:
             stream.remove(tr)
 
     return stream			
@@ -1192,7 +1190,6 @@ def pws(arr,sampling_rate,power=2,pws_timegate=5.):
     Phase-weighted stack, g(t), is then:
     g(t) = 1/N sum j = 1:N s_j(t) * | 1/N sum k = 1:N exp[i * phi_k(t)]|^v
     where N is number of traces used, v is sharpness of phase-weighted stack
-    
     PARAMETERS:
     ---------------------
     arr: N length array of time series data (numpy.ndarray)
@@ -1377,7 +1374,7 @@ def dtw_dvv(ref, cur, para, maxLag, b, direction):
     stbarTime = stbar * dt   # convert from samples to time
     
     # cut the first and last 5% for better regression
-    indx = np.where((tvect>=0.05*npts*dt) & (tvect<=0.95*npts*dt))[0]
+    indx = np.where((tvec>=0.05*npts*dt) & (tvec<=0.95*npts*dt))[0]
 
     # linear regression to get dv/v
     if npts >2:
@@ -1657,7 +1654,7 @@ def WCC_dvv(ref, cur, moving_window_length, slide_step, para):
     return -m0*100,em0*100
 
 
-def wxs_dvv(ref,cur,allfreq,para,dj=1/12, s0=-1, J=-1, sig=False, wvn='morlet',unwrapflag=False):
+def wxs_allfreq(ref,cur,allfreq,para,dj=1/12, s0=-1, J=-1, sig=False, wvn='morlet',unwrapflag=False):
     """
     Compute dt or dv/v in time and frequency domain from wavelet cross spectrum (wxs).
     for all frequecies in an interest range
@@ -1678,7 +1675,6 @@ def wxs_dvv(ref,cur,allfreq,para,dj=1/12, s0=-1, J=-1, sig=False, wvn='morlet',u
 
     Originally written by Tim Clements (1 March, 2019)
     Modified by Congcong Yuan (30 June, 2019) based on (Mao et al. 2019).
-    Updated by Chengxin Jiang (10 Oct, 2019) to merge the functionality for mesurements across all frequency and one freq range 
     """
     # common variables
     twin = para['twin']
@@ -1689,7 +1685,6 @@ def wxs_dvv(ref,cur,allfreq,para,dj=1/12, s0=-1, J=-1, sig=False, wvn='morlet',u
     fmin = np.min(freq)
     fmax = np.max(freq)    
     tvec = np.arange(tmin,tmax,dt)
-    npts = len(tvec)
     
     # perform cross coherent analysis, modified from function 'wavelet.cwt'
     WCT, aWCT, coi, freq, sig = pycwt.wct(ref, cur, dt, dj=dj, s0=s0, J=J, sig=sig, wavelet=wvn, normalize=True)
@@ -1699,66 +1694,47 @@ def wxs_dvv(ref,cur,allfreq,para,dj=1/12, s0=-1, J=-1, sig=False, wvn='morlet',u
     else:
         phase = aWCT
     
+    # convert phase delay to time delay
+    delta_t = phase / (2*np.pi*freq[:,None]) # normalize phase by (2*pi*frequency) 
+
     # zero out data outside frequency band
     if (fmax> np.max(freq)) | (fmax <= fmin):
         raise ValueError('Abort: input frequency out of limits!')
     else:
         freq_indin = np.where((freq >= fmin) & (freq <= fmax))[0]
-
-    # follow MWCS to do two steps of linear regression
-    if not allfreq:
         
-        delta_t_m, delta_t_unc = np.zeros(npts,dtype=np.float32),np.zeros(npts,dtype=np.float32)
-        # assume the tvec is the time window to measure dt
-        for it in range(npts):
-            w = 1/WCT[freq_indin,it]
-            w[~np.isfinite(w)] = 1.
-            delta_t_m[it],delta_t_unc[it] = linear_regression(freq[freq_indin]*2*np.pi, phase[freq_indin,it], w)
-
-        # new weights for regression
-        w2 = 1/np.mean(WCT[freq_indin,:],axis=0)
-        w2[~np.isfinite(w2)] = 1.
-        
-        # now use dt and t to get dv/v
-        if len(w2)>2:
-            if not np.any(delta_t_m):
-                dvv, err = np.nan,np.nan
-            m, em = linear_regression(tvec, delta_t_m, w2, intercept_origin=True)
-            dvv, err = -m, em
+    # initialize arrays for dv/v measurements
+    dvv, err = np.zeros(freq_indin.shape), np.zeros(freq_indin.shape)
+         
+    # loop through freq for linear regression
+    for ii, ifreq in enumerate(freq_indin):
+        if len(tvec)>2:
+            if not np.any(delta_t[ifreq]):
+                continue
+            #---- use WXA as weight for regression----
+            # w = 1.0 / (1.0 / (WCT[ifreq,:] ** 2) - 1.0)
+            # w[WCT[ifreq,time_ind] >= 0.99] = 1.0 / (1.0 / 0.9801 - 1.0)
+            # w = np.sqrt(w * np.sqrt(WXA[ifreq,time_ind]))
+            # w = np.real(w)
+            w = 1/WCT[ifreq]
+            w[~np.isfinite(w)] = 1.0
+            
+            #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
+            m, em = linear_regression(tvec, delta_t[ifreq], w, intercept_origin=True)
+            dvv[ii], err[ii] = -m, em
         else:
             print('not enough points to estimate dv/v for wts')
-            dvv, err=np.nan, np.nan    
-        
-        return dvv*100,err*100
+            dvv[ii], err[ii]=np.nan, np.nan    
 
-    # convert phase directly to delta_t for all frequencies
-    else:
+    del WCT, aWCT, coi, sig, phase, delta_t
+    del tvec, w, m, em
 
-        # convert phase delay to time delay
-        delta_t = phase / (2*np.pi*freq[:,None]) # normalize phase by (2*pi*frequency) 
-        dvv, err = np.zeros(freq_indin.shape), np.zeros(freq_indin.shape)
-            
-        # loop through freq for linear regression
-        for ii, ifreq in enumerate(freq_indin):
-            if len(tvec)>2:
-                if not np.any(delta_t[ifreq]):
-                    continue
-
-                # how to better approach the uncertainty of delta_t
-                w = 1/WCT[ifreq]
-                w[~np.isfinite(w)] = 1.0
-                
-                #m, a, em, ea = linear_regression(time_axis[indx], delta_t[indx], w, intercept_origin=False)
-                m, em = linear_regression(tvec, delta_t[ifreq], w, intercept_origin=True)
-                dvv[ii], err[ii] = -m, em
-            else:
-                print('not enough points to estimate dv/v for wts')
-                dvv[ii], err[ii]=np.nan, np.nan    
-
+    if not allfreq:
+        return np.mean(dvv)*100,np.mean(err)*100
+    else:        
         return freq[freq_indin], dvv*100, err*100
 
-
-def wts_dvv(ref,cur,allfreq,para,dv_range,nbtrial,dj=1/12,s0=-1,J=-1,wvn='morlet',normalize=True):
+def wts_allfreq(ref,cur,allfreq,para,dv_range,nbtrial,dj=1/12,s0=-1,J=-1,wvn='morlet',normalize=True):
     """
     Apply stretching method to continuous wavelet transformation (CWT) of signals
     for all frequecies in an interest range
@@ -1804,30 +1780,6 @@ def wts_dvv(ref,cur,allfreq,para,dv_range,nbtrial,dj=1/12,s0=-1,J=-1,wvn='morlet
     else:
         freq_indin = np.where((freq >= fmin) & (freq <= fmax))[0]
 
-    # convert wavelet domain back to time domain (~filtering)
-    if not allfreq:
-
-        # inverse cwt to time domain
-        icwt1 = pycwt.icwt(cwt1[freq_indin], sj[freq_indin], dt, dj, wvn)
-        icwt2 = pycwt.icwt(cwt2[freq_indin], sj[freq_indin], dt, dj, wvn)
-                
-        # assume all time window is used
-        wcwt1, wcwt2 = np.real(icwt1), np.real(icwt2)
-                        
-        # Normalizes both signals, if appropriate.
-        if normalize:
-            ncwt1 = (wcwt1 - wcwt1.mean()) / wcwt1.std()
-            ncwt2 = (wcwt2 - wcwt2.mean()) / wcwt2.std()
-        else:
-            ncwt1 = wcwt1
-            ncwt2 = wcwt2
-                
-        # run stretching
-        dvv, err, cc, cdp = stretching(ncwt2, ncwt1, dv_range, nbtrial, para)
-        return dvv, err            
-
-    # directly take advantage of the 
-    else:
         # initialize variable
         nfreq=len(freq_indin)
         dvv, cc, cdp, err = np.zeros(nfreq,dtype=np.float32), np.zeros(nfreq,dtype=np.float32),\
@@ -1850,7 +1802,12 @@ def wts_dvv(ref,cur,allfreq,para,dv_range,nbtrial,dj=1/12,s0=-1,J=-1,wvn='morlet
             # run stretching
             dv, error, c1, c2 = stretching(ncwt2, ncwt1, dv_range, nbtrial, para)
             dvv[ii], cc[ii], cdp[ii], err[ii]=dv, c1, c2, error     
-        
+    
+    del cwt1, cwt2, rcwt1, rcwt2, ncwt1, ncwt2, wcwt1, wcwt2, coi, sj
+    
+    if not allfreq:
+        return np.mean(dvv),np.mean(err)
+    else:        
         return freq[freq_indin], dvv, err
 
 

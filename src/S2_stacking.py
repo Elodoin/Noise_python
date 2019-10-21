@@ -6,6 +6,7 @@ import os, glob
 import datetime
 import numpy as np
 import noise_module
+import pandas as pd
 from mpi4py import MPI
 
 if not sys.warnoptions:
@@ -13,13 +14,20 @@ if not sys.warnoptions:
     warnings.simplefilter("ignore")
 
 '''
-Stacking script of NoisePy:
-    1) read the saved cross-correlation data to do sub-stacks (if needed) and all-time average;
-    2) two ptions to do stacking: linear and pws
-    3) save the outputs in ASDF or SAC format based on user's choice.
+Stacking script of NoisePy to:
+    1) load cross-correlation data for sub-stacking (if needed) and all-time average;
+    2) stack data with either linear or phase weighted stacking (pws) methods (or both);
+    3) save outputs in ASDF or SAC format depend on user's choice;
+    4) rotate from a E-N-Z to R-T-Z system if needed.
 
 Authors: Chengxin Jiang (chengxin_jiang@fas.harvard.edu)
          Marine Denolle (mdenolle@fas.harvard.edu)
+
+NOTE: 
+    0. MOST occasions you just need to change parameters followed with detailed explanations to run the script. 
+    1. assuming 3 components are E-N-Z 
+    2. auto-correlation is not kept in the stacking due to the fact that it has only 6 cross-component.
+    this tends to mess up the orders of matrix that stores the CCFs data
 '''
 
 tt0=time.time()
@@ -29,16 +37,36 @@ tt0=time.time()
 ########################################
 
 # absolute path parameters
-rootpath  = '/Volumes/Chengxin/SH'                          # root path for this data processing
-CCFDIR    = os.path.join(rootpath,'CCF')                    # dir where CC data is stored
-STACKDIR  = os.path.join(rootpath,'STACK') 
+rootpath  = '/Users/chengxin/Documents/NoisePy_example/BP'         # root path for this data processing
+CCFDIR    = os.path.join(rootpath,'CCF')                            # dir where CC data is stored
+STACKDIR  = os.path.join(rootpath,'STACK')                          # dir where stacked data is going to
+locations = os.path.join(rootpath,'RAW_DATA/station.txt')                    # station info including network,station,channel,latitude,longitude,elevation
+if not os.path.isfile(locations): 
+    raise ValueError('Abort! station info is needed for this script')
 
-# assemble path information used to read CC data (stored in ASDF files)
-pfiles    = glob.glob(os.path.join(CCFDIR,'paths_*.lst'))
+# define new stacking para
+keep_substack= True                                                 # keep all sub-stacks in final ASDF file
+flag         = False                                                # output intermediate args for debugging
+stack_method = 'both'                                               # linear, pws or both
 
-# load fc_para from S1
+# new rotation para
+rotation     = False                                                # rotation from E-N-Z to R-T-Z 
+correction   = False                                                # angle correction due to mis-orientation
+if rotation and correction:
+    corrfile = os.path.join(rootpath,'meso_angles.txt')             # csv file containing angle info to be corrected
+    locs     = pd.read_csv(corrfile)
+else: locs = []
+
+# maximum memory allowed per core in GB
+MAX_MEM = 4.0
+
+##################################################
+# we expect no parameters need to be changed below
+
+# load fc_para parameters from Step1
 fc_metadata = os.path.join(CCFDIR,'fft_cc_data.txt')
 fc_para     = eval(open(fc_metadata).read())
+ncomp       = fc_para['ncomp']
 samp_freq   = fc_para['samp_freq']
 start_date  = fc_para['start_date']
 end_date    = fc_para['end_date']
@@ -49,21 +77,16 @@ maxlag      = fc_para['maxlag']
 substack    = fc_para['substack']
 substack_len= fc_para['substack_len']
 
-# stacking para
-f_substack = True                                           # whether to do sub-stacking (different from that in S1)
-f_substack_len = 2*substack_len                                  # length for sub-stacking to output
-out_format   = 'ASDF'                                       # ASDF or SAC format for output
-flag         = True                                         # output intermediate args for debugging
-stack_method = 'pws'                                        # linear, pws
-
-# maximum memory allowed per core in GB
-MAX_MEM = 4.0
+# cross component info
+if ncomp==1:enz_system = ['ZZ']
+else: enz_system = ['EE','EN','EZ','NE','NN','NZ','ZE','ZN','ZZ']
+rtz_components = ['ZR','ZT','ZZ','RR','RT','RZ','TR','TT','TZ']
 
 # make a dictionary to store all variables: also for later cc
 stack_para={'samp_freq':samp_freq,'cc_len':cc_len,'step':step,'rootpath':rootpath,'STACKDIR':\
-    STACKDIR,'start_date':start_date[0],'end_date':end_date[0],'inc_hours':inc_hours,\
-    'substack':substack,'substack_len':substack_len,'maxlag':maxlag,'MAX_MEM':MAX_MEM,\
-    'f_substack':f_substack,'f_substack_len':f_substack_len,'stack_method':stack_method}
+    STACKDIR,'start_date':start_date[0],'end_date':end_date[0],'inc_hours':inc_hours,'substack':substack,\
+    'substack_len':substack_len,'maxlag':maxlag,'MAX_MEM':MAX_MEM,'keep_substack':keep_substack,\
+    'stack_method':stack_method,'rotation':rotation,'correction':correction}
 # save fft metadata for future reference
 stack_metadata  = os.path.join(STACKDIR,'stack_data.txt') 
 
@@ -84,122 +107,212 @@ if rank == 0:
 
     # cross-correlation files
     ccfiles   = sorted(glob.glob(os.path.join(CCFDIR,'*.h5')))
-    # all station-pair info saved in ASDF
-    if not len(pfiles):
-        raise ValueError('abort! no paths file found in %s'%CCFDIR)
-    paths_all = noise_module.load_pfiles(pfiles)
-    splits  = len(paths_all)
+
+    # load station info
+    tlocs = pd.read_csv(locations)
+    sta = sorted(np.unique(tlocs['network']+'.'+tlocs['station']))
+    for ii in range(len(sta)):
+        tmp = os.path.join(STACKDIR,sta[ii])
+        if not os.path.isdir(tmp):os.mkdir(tmp)
+
+    # station-pairs
+    pairs_all = []
+    for ii in range(len(sta)-1):
+        for jj in range(ii,len(sta)):
+            pairs_all.append(sta[ii]+'_'+sta[jj])
+
+    splits  = len(pairs_all)
     if len(ccfiles)==0 or splits==0:
         raise IOError('Abort! no available CCF data for stacking')
 
-    # make directories for storing stacked data
-    for ii in range(splits):
-        tr   = paths_all[ii].split('s')
-        tdir = os.path.join(STACKDIR,tr[0]+'.'+tr[1]+'.'+tr[3])
-        if not os.path.isdir(tdir):os.mkdir(tdir)
 else:
-    splits,ccfiles,paths_all = [None for _ in range(3)]
+    splits,ccfiles,pairs_all = [None for _ in range(3)]
 
 # broadcast the variables
 splits    = comm.bcast(splits,root=0)
 ccfiles   = comm.bcast(ccfiles,root=0)
-paths_all = comm.bcast(paths_all,root=0)
-extra = splits % size
+pairs_all = comm.bcast(pairs_all,root=0)
 
 # MPI loop: loop through each user-defined time chunck
-for ipath in range (rank,splits+size-extra,size):
-    if ipath<splits:
-        t0=time.time()
+for ipair in range (rank,splits,size):
+    t0=time.time()
 
-        if flag:print('%dth path for station-pair %s'%(ipath,paths_all[ipath]))
-        # source folder
-        ttr   = paths_all[ipath].split('s')
-        idir  = ttr[0]+'.'+ttr[1]+'.'+ttr[3]
-        outfn = ttr[0]+'.'+ttr[1]+'.'+ttr[3]+'_'+ttr[4]+'.'+ttr[5]+'.'+ttr[7]+'.h5'
-        if flag:print('source %s and output %s'%(idir,outfn))
+    if flag:print('%dth path for station-pair %s'%(ipair,pairs_all[ipair]))
+    # source folder
+    ttr   = pairs_all[ipair].split('_')
+    snet,ssta = ttr[0].split('.')
+    rnet,rsta = ttr[1].split('.')
+    idir  = ttr[0]
 
-        # crude estimation on memory needs (assume float32)
-        num_chunck  = len(ccfiles)
-        if substack:
-            num_segmts = int(np.floor((inc_hours*3600-cc_len)/step))+1
-        else: num_segmts = 1
-        npts_segmt  = int(2*maxlag*samp_freq)+1
-        memory_size = num_chunck*num_segmts*npts_segmt*4/1024**3
-        if memory_size > MAX_MEM:
-            raise ValueError('Require %s G memory (%s GB provided)! Cannot load cc data all once!' % (memory_size,MAX_MEM))
-        if flag:
-            print('Good on memory (need %s G and %s G provided)!' % (memory_size,MAX_MEM))
-            
-        # open array to store fft data/info in memory
-        cc_array = np.zeros((num_chunck*num_segmts,npts_segmt),dtype=np.float32)
-        cc_time  = np.zeros(num_chunck*num_segmts,dtype=np.float)
-        cc_ngood = np.zeros(num_chunck*num_segmts,dtype=np.int16)
+    # continue when file is done
+    toutfn = os.path.join(STACKDIR,idir+'/'+pairs_all[ipair]+'.tmp')   
+    if os.path.isfile(toutfn):continue        
 
-        # loop through all time-chuncks
-        iseg = 0
-        station_pair = paths_all[ipath]
-        for ifile in range(len(ccfiles)):
-            ds=pyasdf.ASDFDataSet(ccfiles[ifile],mpi=False,mode='r')
-            if not ds.auxiliary_data.list(): continue
-            path_list = ds.auxiliary_data['CCF'].list()            
-            if station_pair not in path_list:
-                if flag:print('continue! no %s in %s'%(station_pair,ccfiles[ifile]))
-                continue
-    
-            # load the data by segments
-            tdata = ds.auxiliary_data['CCF'][station_pair].data[:]
-            ttime = ds.auxiliary_data['CCF'][station_pair].parameters['time']
-            tgood = ds.auxiliary_data['CCF'][station_pair].parameters['ngood']
-            tparameters = ds.auxiliary_data['CCF'][station_pair].parameters
-            for ii in range(tdata.shape[0]):
-                cc_array[iseg] = tdata[ii]
-                cc_time[iseg]  = ttime[ii]
-                cc_ngood[iseg] = tgood[ii]
+    # crude estimation on memory needs (assume float32)
+    nccomp     = ncomp*ncomp
+    num_chunck = len(ccfiles)*nccomp
+    num_segmts = 1
+    if substack:    # things are difference when do substack
+        if substack_len==cc_len:
+            num_segmts = int(np.floor((inc_hours*3600-cc_len)/step))
+        else:
+            num_segmts = int(inc_hours/(substack_len/3600))
+    npts_segmt  = int(2*maxlag*samp_freq)+1
+    memory_size = num_chunck*num_segmts*npts_segmt*4/1024**3
+
+    if memory_size > MAX_MEM:
+        raise ValueError('Require %5.3fG memory but only %5.3fG provided)! Cannot load cc data all once!' % (memory_size,MAX_MEM))
+    if flag:
+        print('Good on memory (need %5.2f G and %s G provided)!' % (memory_size,MAX_MEM))
+        
+    # allocate array to store fft data/info
+    cc_array = np.zeros((num_chunck*num_segmts,npts_segmt),dtype=np.float32)
+    cc_time  = np.zeros(num_chunck*num_segmts,dtype=np.float)
+    cc_ngood = np.zeros(num_chunck*num_segmts,dtype=np.int16)
+    cc_comp  = np.chararray(num_chunck*num_segmts,itemsize=2,unicode=True)
+
+    # loop through all time-chuncks
+    iseg = 0
+    dtype = pairs_all[ipair] 
+    for ifile in ccfiles:
+
+        # load the data from daily compilation
+        ds=pyasdf.ASDFDataSet(ifile,mpi=False,mode='r')
+        try:
+            path_list   = ds.auxiliary_data[dtype].list()
+            tparameters = ds.auxiliary_data[dtype][path_list[0]].parameters 
+        except Exception: 
+            if flag:print('continue! no pair of %s in %s'%(dtype,ifile))
+            continue
+        
+        if ncomp==3 and len(path_list)<9:
+            if flag:print('continue! not enough cross components for %s in %s'%(dtype,ifile))
+            continue
+
+        if len(path_list) >9:
+            raise ValueError('more than 9 cross-component exists for %s %s! please double check'%(ifile,dtype))
+                   
+        # load the 9-component data, which is in order in the ASDF
+        for tpath in path_list:
+            cmp1 = tpath.split('_')[0]
+            cmp2 = tpath.split('_')[1]
+            tcmp1 = cmp1[-1];tcmp2 = cmp2[-1]
+
+            # read data and parameter matrix
+            tdata = ds.auxiliary_data[dtype][tpath].data[:]
+            ttime = ds.auxiliary_data[dtype][tpath].parameters['time']
+            tgood = ds.auxiliary_data[dtype][tpath].parameters['ngood']
+            if substack:
+                for ii in range(tdata.shape[0]):
+                    cc_array[iseg] = tdata[ii]
+                    cc_time[iseg]  = ttime[ii]
+                    cc_ngood[iseg] = tgood[ii]
+                    cc_comp[iseg]  = tcmp1+tcmp2
+                    iseg+=1
+            else:
+                cc_array[iseg] = tdata
+                cc_time[iseg]  = ttime
+                cc_ngood[iseg] = tgood
+                cc_comp[iseg]  = tcmp1+tcmp2
                 iseg+=1
-        t1=time.time()
-        if flag:print('loading CCF data takes %6.2fs'%(t1-t0))
-        
-        # continue when there is no data
-        if iseg <= 1: continue
 
-        # do substacking if needed
-        if f_substack:
-            substacks,stime,num_stacks = noise_module.do_stacking(cc_array[:iseg],\
-                cc_time[:iseg],cc_ngood[:iseg],f_substack_len,stack_para)
-            t2=time.time()
-            if flag:print('finished substacking, which takes %6.2fs'%(t2-t1))
-            
-            if not len(substacks):print('continue! no substacks done!');continue
+    t1=time.time()
+    if flag:print('loading CCF data takes %6.2fs'%(t1-t0))
 
-            if out_format=='ASDF':
-                stack_h5 = os.path.join(STACKDIR,idir+'/'+stack_method+'_'+outfn)
-                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds:
-                    for iii in range(substacks.shape[0]):
-                        tparameters['time']  = stime[iii]
-                        tparameters['ngood'] = num_stacks[iii]
-                        tparameters['stack_method'] = stack_method
-                        tpath     = ttr[2][-1]+ttr[6][-1]
-                        data_type = 'T'+str(int(stime[iii]))
-                        ds.add_auxiliary_data(data=substacks[iii], data_type=data_type, path=tpath, parameters=tparameters)
-        
-        # do all stacking
-        t3=time.time()
-        allstacks,alltime,numstacks = noise_module.do_stacking(cc_array[:iseg],cc_time[:iseg],cc_ngood[:iseg],0,stack_para)
-        t4=time.time()
+    # continue when there is no data
+    if iseg <= 1: continue
+    outfn = pairs_all[ipair]+'.h5'         
+    if flag:print('ready to output to %s'%(outfn))                     
 
-        if out_format=='ASDF':
-            stack_h5 = os.path.join(STACKDIR,idir+'/'+stack_method+'_'+outfn)
+    # matrix used for rotation
+    if rotation:bigstack=np.zeros(shape=(9,npts_segmt),dtype=np.float32)
+    if stack_method =='both':bigstack1=np.zeros(shape=(9,npts_segmt),dtype=np.float32)
+
+    # loop through cross-component for stacking
+    iflag=1
+    for icomp in range(nccomp):
+        comp = enz_system[icomp]
+        indx = np.where(cc_comp==comp)[0]
+
+        # jump if there are not enough data
+        if len(indx)<2: 
+            iflag=0;break
+
+        t2=time.time()
+        stack_h5 = os.path.join(STACKDIR,idir+'/'+outfn)
+        # output stacked data
+        if stack_method != 'both':
+            cc_final,ngood_final,stamps_final,allstacks,nstacks = noise_module.stacking(cc_array[indx],cc_time[indx],cc_ngood[indx],stack_para)
+            if not len(allstacks):continue
+            if rotation:bigstack[icomp]=allstacks
+
+            # write stacked data into ASDF file
             with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds:
-                tparameters['time']  = alltime
-                tparameters['ngood'] = numstacks
-                tparameters['stack_method'] = stack_method
-                tpath     = ttr[2][-1]+ttr[6][-1]
-                data_type = 'Allstack'
-                ds.add_auxiliary_data(data=allstacks, data_type=data_type, path=tpath, parameters=tparameters)
+                tparameters['time']  = stamps_final[0]
+                tparameters['ngood'] = nstacks
+                data_type = 'Allstack_'+stack_method
+                ds.add_auxiliary_data(data=allstacks, data_type=data_type, path=comp, parameters=tparameters)
+        else:
+            cc_final,ngood_final,stamps_final,allstacks1,allstacks2,nstacks = noise_module.stacking(cc_array[indx],cc_time[indx],cc_ngood[indx],stack_para)
+            if not len(allstacks1):continue
+            if rotation:
+                bigstack[icomp] =allstacks1
+                bigstack1[icomp]=allstacks2
 
-        t5 = time.time()
-        if flag:print('takes %6.2fs to process one chunck data, %6.2fs for all stacking' %(t5-t0,t4-t3))
+            # write stacked data into ASDF file
+            with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds:
+                tparameters['time']  = stamps_final[0]
+                tparameters['ngood'] = nstacks
+                ds.add_auxiliary_data(data=allstacks1, data_type='Allstack_linear', path=comp, parameters=tparameters)
+                ds.add_auxiliary_data(data=allstacks2, data_type='Allstack_pws', path=comp, parameters=tparameters)
+
+        # keep a track of all sub-stacked data from S1
+        if keep_substack:
+            for ii in range(cc_final.shape[0]):
+                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds:
+                    tparameters['time']  = stamps_final[ii]
+                    tparameters['ngood'] = ngood_final[ii]
+                    data_type = 'T'+str(int(stamps_final[ii]))
+                    ds.add_auxiliary_data(data=cc_final[ii], data_type=data_type, path=comp, parameters=tparameters)            
         
+        t3 = time.time()
+        if flag:print('takes %6.2fs to stack one component with %s stacking method' %(t3-t1,stack_method))
+
+    # do rotation if needed
+    if rotation and iflag:
+        if np.all(bigstack==0):continue
+        tparameters['station_source'] = ssta
+        tparameters['station_receiver'] = rsta
+        if stack_method!='both':
+            bigstack_rotated = noise_module.rotation(bigstack,tparameters,locs,flag)
+
+            # write to file
+            for icomp in range(nccomp):
+                comp  = rtz_components[icomp]
+                tparameters['time']  = stamps_final[0]
+                tparameters['ngood'] = nstacks
+                data_type = 'Allstack_'+stack_method
+                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds2:
+                    ds2.add_auxiliary_data(data=bigstack_rotated[icomp], data_type=data_type, path=tpath, parameters=tparameters)
+        else:
+            bigstack_rotated  = noise_module.rotation(bigstack,tparameters,locs,flag)
+            bigstack_rotated1 = noise_module.rotation(bigstack1,tparameters,locs,flag)
+
+            # write to file
+            for icomp in range(nccomp):
+                comp=rtz_components[icomp]
+                tparameters['time']  = stamps_final[0]
+                tparameters['ngood'] = nstacks
+                with pyasdf.ASDFDataSet(stack_h5,mpi=False) as ds2:
+                    ds2.add_auxiliary_data(data=bigstack_rotated[icomp], data_type='Allstack_linear', path=comp, parameters=tparameters)    
+                    ds2.add_auxiliary_data(data=bigstack_rotated1[icomp], data_type='Allstack_pws', path=comp, parameters=tparameters)
+
+    t4 = time.time()
+    if flag:print('takes %6.2fs to stack/rotate all station pairs %s' %(t4-t1,pairs_all[ipair]))
+
+    # write file stamps 
+    ftmp = open(toutfn,'w');ftmp.write('done');ftmp.close()
+
 tt1 = time.time()
 print('it takes %6.2fs to process step 2 in total' % (tt1-tt0))
 comm.barrier()
@@ -207,4 +320,3 @@ comm.barrier()
 # merge all path_array and output
 if rank == 0:
     sys.exit()
-            
