@@ -23,12 +23,11 @@ install:
   - conda create -n noisepy -c conda-forge python=3.7.3 numpy=1.16.2 numba pandas pycwt mpi4py=3.0.1
   - conda activate noisepy
   - pip install obspy pyasdf
-  - pip install codecov
+  - pip install codecov coverage
   
 # Run test
 script:
   - ls src
-  - python src/S0A_download_ASDF_MPI.py
-  - python src/S1_fft_cc_MPI.py
-  - python src/S2_stacking.py
-  - codecov
+  - coverage run src/S0A_download_ASDF_MPI.py
+  - coverage run src/S1_fft_cc_MPI.py
+  - coverage run src/S2_stacking.py
