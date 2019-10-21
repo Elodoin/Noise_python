@@ -23,8 +23,12 @@ install:
   - conda create -n noisepy -c conda-forge python=3.7.3 numpy=1.16.2 numba pandas pycwt mpi4py=3.0.1
   - conda activate noisepy
   - pip install obspy pyasdf
+  - pip install codecov
   
 # Run test
 script:
   - ls src
   - python src/S0A_download_ASDF_MPI.py
+  - python src/S1_fft_cc_MPI.py
+  - python 
+  - codecov --token=<04cd2c14-dec0-4fc9-a645-d38b536ee2f4>
