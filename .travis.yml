@@ -26,5 +26,5 @@ install:
   
 # Run test
 script:
-  - ls 
-  #- python chengxinjiang/Noise_python/src/S0A_download_ASDF_MPI.py
+  - ls src
+  - python src/S0A_download_ASDF_MPI.py
