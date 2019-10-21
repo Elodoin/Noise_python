@@ -65,8 +65,8 @@ chan_list = ["HHE","HHN","HHZ"]                                 # channel if dow
 net_list  = ["TO"]                                              # network list 
 sta_list  = ["*"]                                               # station (using a station list is way either compared to specifying stations one by one)
 start_date = ["2015_01_01_0_0_0"]                               # start date of download
-end_date   = ["2015_01_02_0_0_0"]                               # end date of download
-inc_hours  = 24                                                 # length of data for each request (in hour)
+end_date   = ["2015_01_01_12_0_0"]                               # end date of download
+inc_hours  = 12                                                 # length of data for each request (in hour)
 ncomp      = len(chan_list)
 
 # get rough estimate of memory needs to ensure it now below up in S1
