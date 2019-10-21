@@ -1,0 +1,18 @@
+sudo: false
+language: python
+sudo: false
+matrix:
+    include:
+        - os: macOS High Sierra
+          python: 3.6
+        - os: macOS High Sierra
+          python: 3.7
+
+# Install packages
+install:
+  - conda install python=3.7.3 numpy=1.16.2 numba pandas pycwt mpi4py=3.0.1
+  - pip install obspy pyasdf
+
+# Run test
+script:
+  - python src/S0A_download_ASDF_MPI.py
