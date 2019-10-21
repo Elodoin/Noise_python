@@ -4,9 +4,13 @@ sudo: false
 matrix:
     include:
         - os: Linux
+          python: 3.5
+        - os: Linux
           python: 3.6
         - os: Linux
           python: 3.7
+        - os: osx
+          python: 3.7          
 
 # Install packages
 install:
@@ -29,6 +33,8 @@ install:
 script:
   - ls src
   - coverage run src/S0A_download_ASDF_MPI.py
+  - codecov
   - coverage run src/S1_fft_cc_MPI.py
+  - codecov
   - coverage run src/S2_stacking.py
   - codecov
