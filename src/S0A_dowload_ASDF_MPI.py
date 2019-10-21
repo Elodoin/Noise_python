@@ -45,7 +45,7 @@ Enjoy the NoisePy journey!
 tt0=time.time()
 
 # paths and filenames
-rootpath = '/Volumes/Chengxin/CCSE'                          # roothpath for the project
+rootpath = './'                                                 # roothpath for the project
 direc  = os.path.join(rootpath,'RAW_DATA')                      # where to store the downloaded data
 dlist  = os.path.join(direc,'station.txt')                      # CSV file for station location info
 
