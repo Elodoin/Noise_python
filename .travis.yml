@@ -31,3 +31,4 @@ script:
   - coverage run src/S0A_download_ASDF_MPI.py
   - coverage run src/S1_fft_cc_MPI.py
   - coverage run src/S2_stacking.py
+  - codecov
