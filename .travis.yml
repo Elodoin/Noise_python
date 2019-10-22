@@ -10,7 +10,7 @@ matrix:
         - os: Linux
           python: 3.7
         - os: osx
-          python: 3.7          
+          env: PYTHON_VERSION=3.7  
 
 # Install packages
 install:
@@ -32,9 +32,5 @@ install:
 # Run test
 script:
   - ls src
-  - coverage run src/S0A_download_ASDF_MPI.py
-  - codecov
-  - coverage run src/S1_fft_cc_MPI.py
-  - codecov
-  - coverage run src/S2_stacking.py
+  - coverage run test/test.py
   - codecov
