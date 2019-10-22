@@ -5,7 +5,7 @@ Detailed documentation can be found at https://github.com/mdenolle/NoisePy/tree/
 
 [![Documentation Status](https://readthedocs.org/projects/noise-python/badge/?version=latest)](https://noise-python.readthedocs.io/en/latest/?badge=latest)
 [![Build Status](https://travis-ci.com/chengxinjiang/Noise_python.svg?token=jimdAXcrUt4ngV6Dy3s7&branch=master)](https://travis-ci.com/chengxinjiang/Noise_python)
-[![Codecov](https://codecov.io/gh/kura-okubo/SeisDownload.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/kura-okubo/SeisDownload.jl)
+[![Codecov](https://codecov.io/gh/chengxinjiang/Noise_python)
 
 <img src="/docs/figures/logo.png" width="800" height="400">
  
