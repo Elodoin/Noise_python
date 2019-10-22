@@ -30,5 +30,6 @@ install:
 # Run test
 script:
   - ls src
-  - coverage run test/test.py
+  - cd src
+  - coverage run test.py
   - codecov
