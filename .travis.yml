@@ -32,4 +32,3 @@ script:
   - ls src
   - coverage run test/test.py
   - codecov
-==
