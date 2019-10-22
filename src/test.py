@@ -264,6 +264,10 @@ print('downloading step takes %6.2f s' %(tt1-tt0))
 
 comm.barrier()
 
+rootpath  = './'                # root path for this data processing
+CCFDIR    = os.path.join(rootpath,'CCF')                                    # dir to store CC data
+DATADIR   = os.path.join(rootpath,'RAW_DATA')                               # dir where noise data is located
+
 #-------some control parameters--------
 input_fmt   = 'asdf'                                                        # string: 'asdf', 'sac','mseed' 
 to_whiten   = 'no'                                                          # 'no' for no whitening, or 'running_mean', 'one_bit' for normalization
