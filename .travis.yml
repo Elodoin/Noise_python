@@ -4,10 +4,6 @@ sudo: false
 matrix:
     include:
         - os: Linux
-          python: 3.5
-        - os: Linux
-          python: 3.6
-        - os: Linux
           python: 3.7
 
 # Install packages
@@ -30,6 +26,5 @@ install:
 # Run test
 script:
   - ls src
-  - cd src
-  - coverage run test.py
+  - coverage run src/test.py
   - codecov
